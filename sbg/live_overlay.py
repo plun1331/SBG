@@ -525,13 +525,14 @@ def _configure_windows_overlay(
         255,
         _WIN32_LWA_COLORKEY,
     )
+    left, top, width, height = _monitor_rect(monitor)
     ctypes.windll.user32.SetWindowPos(
         hwnd,
         _WIN32_HWND_TOPMOST,
-        int(monitor["left"]),
-        int(monitor["top"]),
-        int(monitor["width"]),
-        int(monitor["height"]),
+        left,
+        top,
+        width,
+        height,
         _WIN32_SWP_SHOWWINDOW | _WIN32_SWP_NOACTIVATE,
     )
     return hwnd
@@ -541,17 +542,28 @@ def _refresh_windows_overlay(hwnd: int, monitor: dict) -> None:
     """Re-assert topmost positioning for the transparent overlay on Windows."""
     if not _is_windows() or not hwnd:
         return
+    left, top, width, height = _monitor_rect(monitor)
     ctypes.windll.user32.SetWindowPos(
         hwnd,
         _WIN32_HWND_TOPMOST,
-        int(monitor["left"]),
-        int(monitor["top"]),
-        int(monitor["width"]),
-        int(monitor["height"]),
+        left,
+        top,
+        width,
+        height,
         _WIN32_SWP_SHOWWINDOW
         | _WIN32_SWP_NOACTIVATE
         | _WIN32_SWP_NOMOVE
         | _WIN32_SWP_NOSIZE,
+    )
+
+
+def _monitor_rect(monitor: dict) -> tuple[int, int, int, int]:
+    """Return monitor bounds as integer (left, top, width, height)."""
+    return (
+        int(monitor["left"]),
+        int(monitor["top"]),
+        int(monitor["width"]),
+        int(monitor["height"]),
     )
 
 
