@@ -352,8 +352,8 @@ class LiveOverlay:
 
         if state is not None:
             info_lines = [
-                f"BALL {state.ball_position.x:.0f}, {state.ball_position.y:.0f}",
-                f"HOLE {state.hole_position.x:.0f}, {state.hole_position.y:.0f}",
+                f"BALL {_format_coord(state.ball_position)}",
+                f"HOLE {_format_coord(state.hole_position)}",
                 f"DIST {state.distance_to_hole:.0f}",
                 f"WIND {state.wind_speed:.1f} @ {state.wind_direction_deg:.0f}°",
                 f"POWER {state.power_gauge:.2f}",
@@ -418,6 +418,10 @@ def _draw_text_block(
         )
 
 
+def _format_coord(pos) -> str:
+    return f"{pos.x:.0f}, {pos.y:.0f}"
+
+
 def _clamp_point(img: np.ndarray, x: float, y: float) -> tuple:
     h, w = img.shape[:2]
     cx = int(max(0, min(w - 1, round(x))))
@@ -452,7 +456,12 @@ def _draw_path_samples(
 ) -> None:
     if not terrain:
         return
-    n = min(len(terrain), len(obstacles)) if obstacles else len(terrain)
+    obs = list(obstacles) if obstacles else []
+    if len(obs) < len(terrain):
+        obs.extend([0.0] * (len(terrain) - len(obs)))
+    elif len(obs) > len(terrain):
+        obs = obs[:len(terrain)]
+    n = len(terrain)
     if n <= 0:
         return
     bx, by = ball.x, ball.y
@@ -462,8 +471,7 @@ def _draw_path_samples(
         px = bx + t * (hx - bx)
         py = by + t * (hy - by)
         cx, cy = _clamp_point(img, px, py)
-        obs_val = obstacles[i] if i < len(obstacles) else 0.0
-        if obs_val >= 0.5:
+        if obs[i] >= 0.5:
             colour = _COLOUR_OBSTACLE
             radius = _PATH_RADIUS + 1
         else:
