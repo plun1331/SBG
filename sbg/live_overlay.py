@@ -131,9 +131,13 @@ _WIN32_GWL_EXSTYLE = -20
 _WIN32_WS_EX_LAYERED = 0x00080000
 _WIN32_WS_EX_TRANSPARENT = 0x00000020
 _WIN32_WS_EX_TOOLWINDOW = 0x00000080
+_WIN32_WS_EX_NOACTIVATE = 0x08000000
 _WIN32_LWA_COLORKEY = 0x00000001
 _WIN32_HWND_TOPMOST = -1
 _WIN32_SWP_SHOWWINDOW = 0x0040
+_WIN32_SWP_NOSIZE = 0x0001
+_WIN32_SWP_NOMOVE = 0x0002
+_WIN32_SWP_NOACTIVATE = 0x0010
 
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
@@ -232,6 +236,7 @@ class LiveOverlay:
                     RuntimeWarning,
                 )
             overlay_configured = False
+            overlay_hwnd = None
             overlay_base = None
             if overlay_only:
                 bg_color = _TRANSPARENT_KEY if transparent_mode else _OVERLAY_ONLY_BG
@@ -312,10 +317,12 @@ class LiveOverlay:
 
                     cv2.imshow(_WINDOW_NAME, annotated)
                     if transparent_mode and not overlay_configured:
-                        _configure_windows_overlay(
+                        overlay_hwnd = _configure_windows_overlay(
                             _WINDOW_NAME, _TRANSPARENT_KEY, monitor
                         )
                         overlay_configured = True
+                    if transparent_mode and overlay_hwnd:
+                        _refresh_windows_overlay(overlay_hwnd, monitor)
 
             finally:
                 if writer is not None:
@@ -480,14 +487,14 @@ def _configure_windows_overlay(
     window_name: str,
     transparent_key: tuple[int, int, int],
     monitor: dict,
-) -> None:
+) -> Optional[int]:
     """Configure a click-through layered window for the overlay on Windows.
 
     Note: this relies on a window-title lookup and can fail if the title
     changes or another window shares the same title.
     """
     if not _is_windows():
-        return
+        return None
     # OpenCV does not expose window handles directly, so fall back to title lookup.
     hwnd = ctypes.windll.user32.FindWindowW(None, window_name)
     if not hwnd:
@@ -495,7 +502,7 @@ def _configure_windows_overlay(
             "Unable to find overlay window handle; transparent mode disabled.",
             RuntimeWarning,
         )
-        return
+        return None
 
     ex_style = ctypes.windll.user32.GetWindowLongW(hwnd, _WIN32_GWL_EXSTYLE)
     ctypes.windll.user32.SetWindowLongW(
@@ -504,7 +511,8 @@ def _configure_windows_overlay(
         ex_style
         | _WIN32_WS_EX_LAYERED
         | _WIN32_WS_EX_TRANSPARENT
-        | _WIN32_WS_EX_TOOLWINDOW,
+        | _WIN32_WS_EX_TOOLWINDOW
+        | _WIN32_WS_EX_NOACTIVATE,
     )
     ctypes.windll.user32.SetLayeredWindowAttributes(
         hwnd,
@@ -519,7 +527,26 @@ def _configure_windows_overlay(
         int(monitor["top"]),
         int(monitor["width"]),
         int(monitor["height"]),
-        _WIN32_SWP_SHOWWINDOW,
+        _WIN32_SWP_SHOWWINDOW | _WIN32_SWP_NOACTIVATE,
+    )
+    return hwnd
+
+
+def _refresh_windows_overlay(hwnd: int, monitor: dict) -> None:
+    """Re-assert topmost positioning for the transparent overlay on Windows."""
+    if not _is_windows() or not hwnd:
+        return
+    ctypes.windll.user32.SetWindowPos(
+        hwnd,
+        _WIN32_HWND_TOPMOST,
+        int(monitor["left"]),
+        int(monitor["top"]),
+        int(monitor["width"]),
+        int(monitor["height"]),
+        _WIN32_SWP_SHOWWINDOW
+        | _WIN32_SWP_NOACTIVATE
+        | _WIN32_SWP_NOMOVE
+        | _WIN32_SWP_NOSIZE,
     )
 
 
