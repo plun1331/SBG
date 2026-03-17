@@ -8,8 +8,7 @@ needed to predict the best chip shot:
   is aiming.  It visualises the terrain along the shot path and places a flag
   icon whose horizontal position encodes aim direction and whose vertical
   position encodes distance to the hole.
-* Generic heuristics for ball / hole positions, wind, and power gauge (used
-  as fallback features when the hit bar is not visible).
+* Bar-only analysis: non-bar detections are no longer used.
 
 Hit-bar coordinate reference
 -----------------------------
@@ -194,8 +193,6 @@ class ScreenAnalyzer:
     The primary source of information is the **hit bar**: a narrow vertical
     UI strip visible while the player is aiming.  When the bar is visible,
     its flag icon directly encodes aim direction and distance to the hole.
-    Generic colour-based heuristics for ball/hole positions serve as
-    supplementary features.
 
     Usage::
 
@@ -203,8 +200,8 @@ class ScreenAnalyzer:
         state = analyzer.analyze(frame)   # frame is a BGR numpy array
 
     Parameters:
-        terrain_samples: Number of samples along the ball→hole path used by
-            the fallback terrain/obstacle scan.
+        terrain_samples: Retained for backwards compatibility. Bar-only mode
+            does not use terrain/obstacle sampling.
     """
 
     def __init__(self, terrain_samples: int = _TERRAIN_SAMPLES) -> None:
@@ -223,8 +220,8 @@ class ScreenAnalyzer:
                 by ``cv2.imread`` or ``cv2.VideoCapture``).
 
         Returns:
-            GameState populated with detected positions, hit-bar data, and
-            supplementary terrain/wind information.
+            GameState populated with hit-bar data. Non-bar features are
+            defaulted to neutral values.
 
         Raises:
             ValueError: If *frame* has an unexpected shape or dtype.
@@ -237,25 +234,20 @@ class ScreenAnalyzer:
             frame = np.clip(frame, 0, 255).astype(np.uint8)
 
         h, w = frame.shape[:2]
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
         hit_bar = self._read_hit_bar(frame, w, h)
-        ball_pos = self._detect_ball(hsv, w, h)
-        hole_pos = self._detect_hole(hsv, w, h)
-        terrain, obstacles = self._sample_path(hsv, ball_pos, hole_pos, w, h)
-        wind_speed, wind_dir = self._detect_wind(frame, w, h)
-        power = self._detect_power_gauge(frame, w, h)
+        centre = Position(w * 0.5, h * 0.5)
 
         return GameState(
-            ball_position=ball_pos,
-            hole_position=hole_pos,
+            ball_position=centre,
+            hole_position=centre,
             screen_width=w,
             screen_height=h,
-            wind_speed=wind_speed,
-            wind_direction_deg=wind_dir,
-            terrain_elevation=terrain,
-            obstacle_map=obstacles,
-            power_gauge=power,
+            wind_speed=0.0,
+            wind_direction_deg=0.0,
+            terrain_elevation=[],
+            obstacle_map=[],
+            power_gauge=0.5,
+            distance_to_hole=0.0,
             hit_bar=hit_bar,
         )
 

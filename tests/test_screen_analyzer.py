@@ -228,37 +228,37 @@ class TestGameState:
     def test_feature_vector_length(self):
         state = self._make_state()
         fv = state.to_feature_vector()
-        assert len(fv) == 53
+        assert len(fv) == 11
 
     def test_feature_vector_no_bar(self):
         state = self._make_state(hit_bar=None)
         fv = state.to_feature_vector()
-        assert len(fv) == 53
-        # bar_visible element (index 42) should be 0
-        assert fv[42] == pytest.approx(0.0)
-        # direction element (index 43) should default to 0.5
-        assert fv[43] == pytest.approx(0.5)
+        assert len(fv) == 11
+        # bar_visible element (index 0) should be 0
+        assert fv[0] == pytest.approx(0.0)
+        # direction element (index 1) should default to 0.5
+        assert fv[1] == pytest.approx(0.5)
 
     def test_feature_vector_with_bar_centred(self):
         bar = HitBarState(is_visible=True, flag_direction_offset=0.0, flag_y_pct=0.5)
         state = self._make_state(hit_bar=bar)
         fv = state.to_feature_vector()
-        assert fv[42] == pytest.approx(1.0)   # bar visible
-        assert fv[43] == pytest.approx(0.5)   # direction offset 0 → 0.5
-        assert fv[44] == pytest.approx(0.5)   # y_pct
+        assert fv[0] == pytest.approx(1.0)   # bar visible
+        assert fv[1] == pytest.approx(0.5)   # direction offset 0 → 0.5
+        assert fv[2] == pytest.approx(0.5)   # y_pct
 
     def test_feature_vector_with_bar_left(self):
         bar = HitBarState(is_visible=True, flag_direction_offset=-1.0, flag_y_pct=0.0)
         state = self._make_state(hit_bar=bar)
         fv = state.to_feature_vector()
-        assert fv[43] == pytest.approx(0.0)   # far left → 0
+        assert fv[1] == pytest.approx(0.0)   # far left → 0
 
     def test_feature_vector_with_bar_right(self):
         bar = HitBarState(is_visible=True, flag_direction_offset=1.0, flag_y_pct=1.0)
         state = self._make_state(hit_bar=bar)
         fv = state.to_feature_vector()
-        assert fv[43] == pytest.approx(1.0)   # far right → 1
-        assert fv[44] == pytest.approx(1.0)
+        assert fv[1] == pytest.approx(1.0)   # far right → 1
+        assert fv[2] == pytest.approx(1.0)
 
     def test_feature_vector_all_in_range(self):
         bar = HitBarState(
@@ -332,7 +332,7 @@ class TestScreenAnalyzerBlankFrame:
 
     def test_feature_vector_length(self):
         fv = self.state.to_feature_vector()
-        assert len(fv) == 53
+        assert len(fv) == 11
 
     def test_power_gauge_in_range(self):
         assert 0.0 <= self.state.power_gauge <= 1.0
@@ -566,7 +566,7 @@ class TestRealScreenshots:
         assert isinstance(state, GameState), f"{name}: expected GameState"
         assert state.hit_bar is not None, f"{name}: hit_bar should not be None"
         fv = state.to_feature_vector()
-        assert len(fv) == 53, f"{name}: feature vector length {len(fv)} != 53"
+        assert len(fv) == 11, f"{name}: feature vector length {len(fv)} != 11"
         assert 0.0 <= state.power_gauge <= 1.0
 
     def test_green_course_hitting(self):

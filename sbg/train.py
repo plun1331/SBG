@@ -13,7 +13,7 @@ Data format
 Each sample is stored in a NumPy ``.npz`` file with the following keys:
 
 * ``image``     – uint8 array of shape ``(H, W, 3)`` (BGR, raw screen crop).
-* ``features``  – float32 array of shape ``(53,)`` from
+* ``features``  – float32 array of shape ``(11,)`` from
   ``GameState.to_feature_vector()``.
 * ``direction`` – float scalar: ground-truth direction offset (degrees).
 * ``power``     – float scalar: ground-truth power in [0, 1].

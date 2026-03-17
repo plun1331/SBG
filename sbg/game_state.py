@@ -141,57 +141,17 @@ class GameState:
         Convert the game state into a flat feature vector suitable for the ML
         model.  All values are normalised to approximately [0, 1].
 
-        The vector is structured as follows (53 values total):
+        The vector is structured as follows (11 values total):
 
-        * [0–1]   Ball position (x, y), normalised by screen size.
-        * [2–3]   Hole position (x, y), normalised by screen size.
-        * [4–5]   Displacement vector (dx, dy), normalised by screen size.
-        * [6]     Distance to hole, normalised by screen diagonal.
-        * [7–8]   Wind x/y components, normalised to ``[-1, 1]``.
-        * [9]     Power gauge (already in ``[0, 1]``).
-        * [10–25] Terrain elevation samples (16 values).
-        * [26–41] Obstacle map samples (16 values).
-        * [42]    Hit-bar visibility flag (0 or 1).
-        * [43]    Flag direction offset, mapped to ``[0, 1]``
-                  (0 = far left, 0.5 = centre, 1 = far right).
-        * [44]    Flag Y position within the bar (0 = top, 1 = bottom).
-        * [45–52] Terrain-zone encoding (8 segments, each 0/0.5/1).
+        * [0]    Hit-bar visibility flag (0 or 1).
+        * [1]    Flag direction offset, mapped to ``[0, 1]``
+                 (0 = far left, 0.5 = centre, 1 = far right).
+        * [2]    Flag Y position within the bar (0 = top, 1 = bottom).
+        * [3–10] Terrain-zone encoding (8 segments, each 0/0.5/1).
 
         Returns:
-            A list of 53 floats.
+            A list of 11 floats.
         """
-        ball_x = self.ball_position.x / self.screen_width
-        ball_y = self.ball_position.y / self.screen_height
-        hole_x = self.hole_position.x / self.screen_width
-        hole_y = self.hole_position.y / self.screen_height
-        dx = (self.hole_position.x - self.ball_position.x) / self.screen_width
-        dy = (self.hole_position.y - self.ball_position.y) / self.screen_height
-        diag = (self.screen_width**2 + self.screen_height**2) ** 0.5
-        dist = self.distance_to_hole / diag if diag > 0 else 0.0
-        wind_x = self.wind_speed * math.cos(
-            math.radians(self.wind_direction_deg)
-        ) / 20.0
-        wind_y = self.wind_speed * math.sin(
-            math.radians(self.wind_direction_deg)
-        ) / 20.0
-
-        terrain = list(self.terrain_elevation) if self.terrain_elevation else [0.0] * 16
-        obstacles = list(self.obstacle_map) if self.obstacle_map else [0.0] * 16
-
-        # Pad or truncate to exactly 16 samples
-        terrain = (terrain + [0.0] * 16)[:16]
-        obstacles = (obstacles + [0.0] * 16)[:16]
-
-        base = [
-            ball_x, ball_y,
-            hole_x, hole_y,
-            dx, dy,
-            dist,
-            wind_x, wind_y,
-            self.power_gauge,
-        ]
-
-        # Hit-bar features (11 values)
         if self.hit_bar is not None and self.hit_bar.is_visible:
             bar_visible = 1.0
             # Map direction offset [-1, 1] → [0, 1] for the feature vector
@@ -204,9 +164,7 @@ class GameState:
             bar_y = 0.5
             bar_terrain = [TerrainZoneType.FAIRWAY.value] * 8
 
-        hit_bar_vec = [bar_visible, bar_dir, bar_y] + bar_terrain
-
-        return base + terrain + obstacles + hit_bar_vec
+        return [bar_visible, bar_dir, bar_y] + bar_terrain
 
 
 @dataclass

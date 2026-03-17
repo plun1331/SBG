@@ -34,12 +34,6 @@ Keyboard shortcuts while the window is open:
 
 Overlay elements drawn on each frame:
 
-* **Ball marker** – white circle at the detected ball location.
-* **Hole marker** – magenta ring at the detected hole location.
-* **Ball→hole path samples** – dots along the shot line with red points
-  indicating detected obstacles.
-* **Wind vector** – arrow showing detected wind direction and speed.
-* **Power gauge** – small bar showing the detected power level.
 * **Bar region rectangle** – green when the hit bar is detected, red when
   not detected.  Always drawn so you can confirm the region is correct.
 * **Terrain-zone strips** – semi-transparent colour bands along the bar:
@@ -228,6 +222,10 @@ class LiveOverlay:
             cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_NORMAL)
             transparent_mode = self._transparent and _is_windows()
             overlay_only = self._overlay_only or transparent_mode
+            if transparent_mode:
+                cv2.setWindowProperty(
+                    _WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN
+                )
             if self._transparent and not transparent_mode:
                 warnings.warn(
                     "Transparent overlay is only available on Windows.",
@@ -359,19 +357,6 @@ class LiveOverlay:
         bx1 = bx0 + bw
         by1 = by0 + bh
 
-        if state is not None:
-            _draw_ball_marker(out, state.ball_position)
-            _draw_hole_marker(out, state.hole_position)
-            _draw_path_samples(
-                out,
-                state.ball_position,
-                state.hole_position,
-                state.terrain_elevation,
-                state.obstacle_map,
-            )
-            _draw_wind_vector(out, state.wind_speed, state.wind_direction_deg)
-            _draw_power_gauge(out, state.power_gauge)
-
         if state is not None and state.hit_bar is not None:
             bar: HitBarState = state.hit_bar
 
@@ -417,16 +402,6 @@ class LiveOverlay:
         if recording:
             hud.append("● REC")
         _draw_text_block(out, hud, 12, 24, _TEXT_COLOUR)
-
-        if state is not None:
-            info_lines = [
-                f"BALL {_format_coord(state.ball_position)}",
-                f"HOLE {_format_coord(state.hole_position)}",
-                f"DIST {state.distance_to_hole:.0f}",
-                f"WIND {state.wind_speed:.1f} @ {state.wind_direction_deg:.0f}°",
-                f"POWER {state.power_gauge:.2f}",
-            ]
-            _draw_text_block(out, info_lines, 12, 150, _TEXT_COLOUR)
 
         return out
 

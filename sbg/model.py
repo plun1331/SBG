@@ -10,7 +10,7 @@ Architecture
 * **Image branch** – A lightweight CNN (3 convolutional blocks with BatchNorm
   and max-pooling) that encodes the 3-channel input image into a 256-dim
   embedding.
-* **Feature branch** – A two-layer MLP that encodes the 42-dim game-state
+* **Feature branch** – A two-layer MLP that encodes the 11-dim game-state
   feature vector into a 64-dim embedding.
 * **Head** – Concatenation of both embeddings fed through a fully-connected
   head with dropout regularisation, producing three scalar outputs:
@@ -27,8 +27,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Dimension of the feature vector produced by GameState.to_feature_vector()
-# Breakdown: 10 base + 16 terrain + 16 obstacle + 11 hit-bar = 53
-FEATURE_DIM = 53  # 10 base + 16 terrain + 16 obstacle + 11 hit-bar
+# Breakdown: 11 hit-bar values
+FEATURE_DIM = 11
 
 # Default image input size fed to the CNN branch
 DEFAULT_IMG_H = 120
