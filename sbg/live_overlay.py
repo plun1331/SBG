@@ -292,15 +292,18 @@ class LiveOverlay:
                     # Draw overlay
                     fps_display = fps_counter.tick()
                     annotated_full = None
-                    if recording or not overlay_only:
-                        annotated_full = self._draw_overlay(
-                            frame, state, fps_display, recording
-                        )
                     if overlay_only and overlay_base is not None:
                         annotated = self._draw_overlay(
                             overlay_base.copy(), state, fps_display, recording
                         )
+                        if recording:
+                            annotated_full = self._draw_overlay(
+                                frame, state, fps_display, recording
+                            )
                     else:
+                        annotated_full = self._draw_overlay(
+                            frame, state, fps_display, recording
+                        )
                         annotated = annotated_full
 
                     # Write to file if recording
@@ -486,10 +489,12 @@ def _format_coord(pos) -> str:
 
 
 def _is_windows() -> bool:
+    """Return True when running on Windows."""
     return sys.platform.startswith("win")
 
 
 def _bgr_to_windows_colorref(bgr: tuple[int, int, int]) -> int:
+    """Convert BGR to a Windows COLORREF integer for layered windows."""
     b, g, r = bgr
     return r | (g << 8) | (b << 16)
 
