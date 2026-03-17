@@ -337,6 +337,7 @@ class LiveOverlay:
                             overlay_refresh_at = (
                                 time.perf_counter() + _OVERLAY_REFRESH_INTERVAL
                             )
+                            capture_hwnd = overlay_hwnd
                     if transparent_mode and overlay_hwnd:
                         current_time = time.perf_counter()
                         if current_time >= overlay_refresh_at:
@@ -349,21 +350,15 @@ class LiveOverlay:
                                 RuntimeWarning,
                             )
                             capture_exclusion_warned = True
-                    if _is_windows_11() and not capture_excluded:
-                        if capture_hwnd is None:
-                            capture_hwnd = overlay_hwnd or ctypes.windll.user32.FindWindowW(
-                                None,
-                                _WINDOW_NAME,
+                    if transparent_mode and _is_windows_11() and not capture_excluded:
+                        if capture_hwnd and _set_window_capture_exclusion(capture_hwnd):
+                            capture_excluded = True
+                        elif capture_hwnd and not capture_exclusion_warned:
+                            warnings.warn(
+                                "Unable to exclude the overlay window from capture.",
+                                RuntimeWarning,
                             )
-                        if capture_hwnd:
-                            if _set_window_capture_exclusion(capture_hwnd):
-                                capture_excluded = True
-                            elif not capture_exclusion_warned:
-                                warnings.warn(
-                                    "Unable to exclude the overlay window from capture.",
-                                    RuntimeWarning,
-                                )
-                                capture_exclusion_warned = True
+                            capture_exclusion_warned = True
 
             finally:
                 if writer is not None:
