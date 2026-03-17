@@ -9,6 +9,7 @@ from sbg.game_state import GameState, HitBarState, ShotParameters, TerrainZoneTy
 from sbg.screen_analyzer import ScreenAnalyzer
 from sbg.model import ShotPredictorModel
 from sbg.shot_predictor import ShotPredictor
+from sbg.live_overlay import LiveOverlay
 
 __all__ = [
     "GameState",
@@ -18,4 +19,5 @@ __all__ = [
     "ScreenAnalyzer",
     "ShotPredictorModel",
     "ShotPredictor",
+    "LiveOverlay",
 ]
