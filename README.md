@@ -140,6 +140,12 @@ Keyboard shortcuts inside the overlay window:
 
 Use `--monitor` to pick which display to capture if needed.
 
+On Windows 11, you can enable a transparent click-through overlay:
+
+```bash
+python -m sbg.live_overlay --transparent
+```
+
 ### Train the model
 
 Training data is stored as `.npz` files (one per sample) in a directory. Each file must contain:

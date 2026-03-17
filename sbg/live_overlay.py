@@ -19,6 +19,9 @@ Usage (API)::
     overlay = LiveOverlay(output="out.mp4")
     overlay.run()                          # display + save to out.mp4
 
+    overlay = LiveOverlay(transparent=True)
+    overlay.run()                          # transparent overlay (Windows 11)
+
 Keyboard shortcuts while the window is open:
 
     Q / Esc  – quit
@@ -53,6 +56,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 import math
+import sys
+import ctypes
 from typing import Optional
 
 import cv2
@@ -119,6 +124,9 @@ _OBSTACLE_THRESHOLD = 0.5    # Normalised obstacle map cutoff (0–1)
 _MIN_WIND_ARROW_LEN = 8
 _MAX_WIND_ARROW_LEN = 40
 
+# Transparent overlay key (BGR) used for Windows layered window colorkey
+_TRANSPARENT_KEY = (255, 0, 255)  # magenta
+
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
 
@@ -145,6 +153,8 @@ class LiveOverlay:
         fps: Capture / display target frame rate.
         analyzer: A pre-built :class:`ScreenAnalyzer` instance.  If ``None``
             one is created automatically.
+        transparent: When True, show a click-through transparent overlay on
+            Windows (uses a layered window with a color key).
     """
 
     def __init__(
@@ -153,6 +163,7 @@ class LiveOverlay:
         output: Optional[str] = None,
         fps: int = _TARGET_FPS,
         analyzer: Optional[ScreenAnalyzer] = None,
+        transparent: bool = False,
     ) -> None:
         if not _MSS_AVAILABLE:
             raise ImportError(
@@ -163,6 +174,7 @@ class LiveOverlay:
         self._output_path = output
         self._fps = max(1, fps)
         self._analyzer = analyzer or ScreenAnalyzer()
+        self._transparent = transparent
 
     # ------------------------------------------------------------------
     # Public interface
@@ -196,6 +208,8 @@ class LiveOverlay:
             fps_counter = _FpsCounter()
 
             cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_NORMAL)
+            transparent_mode = self._transparent and _is_windows()
+            overlay_configured = False
 
             try:
                 while True:
@@ -245,15 +259,27 @@ class LiveOverlay:
 
                     # Draw overlay
                     fps_display = fps_counter.tick()
-                    annotated = self._draw_overlay(
+                    annotated_full = self._draw_overlay(
                         frame, state, fps_display, recording
                     )
+                    annotated = annotated_full
+                    if transparent_mode:
+                        overlay_base = np.empty_like(frame)
+                        overlay_base[:] = _TRANSPARENT_KEY
+                        annotated = self._draw_overlay(
+                            overlay_base, state, fps_display, recording
+                        )
 
                     # Write to file if recording
                     if recording and writer is not None:
-                        writer.write(annotated)
+                        writer.write(annotated_full)
 
                     cv2.imshow(_WINDOW_NAME, annotated)
+                    if transparent_mode and not overlay_configured:
+                        _configure_windows_overlay(
+                            _WINDOW_NAME, _TRANSPARENT_KEY, monitor
+                        )
+                        overlay_configured = True
 
             finally:
                 if writer is not None:
@@ -426,6 +452,58 @@ def _format_coord(pos) -> str:
     return f"{pos.x:.0f}, {pos.y:.0f}"
 
 
+def _is_windows() -> bool:
+    return sys.platform.startswith("win")
+
+
+def _colorref_from_bgr(bgr: tuple[int, int, int]) -> int:
+    b, g, r = bgr
+    return int(r | (g << 8) | (b << 16))
+
+
+def _configure_windows_overlay(
+    window_name: str,
+    transparent_key: tuple[int, int, int],
+    monitor: dict,
+) -> None:
+    """Configure a click-through layered window for the overlay on Windows."""
+    if not _is_windows():
+        return
+    hwnd = ctypes.windll.user32.FindWindowW(None, window_name)
+    if not hwnd:
+        return
+
+    GWL_EXSTYLE = -20
+    WS_EX_LAYERED = 0x00080000
+    WS_EX_TRANSPARENT = 0x00000020
+    WS_EX_TOOLWINDOW = 0x00000080
+    LWA_COLORKEY = 0x00000001
+    HWND_TOPMOST = -1
+    SWP_SHOWWINDOW = 0x0040
+
+    ex_style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+    ctypes.windll.user32.SetWindowLongW(
+        hwnd,
+        GWL_EXSTYLE,
+        ex_style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
+    )
+    ctypes.windll.user32.SetLayeredWindowAttributes(
+        hwnd,
+        _colorref_from_bgr(transparent_key),
+        255,
+        LWA_COLORKEY,
+    )
+    ctypes.windll.user32.SetWindowPos(
+        hwnd,
+        HWND_TOPMOST,
+        int(monitor["left"]),
+        int(monitor["top"]),
+        int(monitor["width"]),
+        int(monitor["height"]),
+        SWP_SHOWWINDOW,
+    )
+
+
 def _clamp_value(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
 
@@ -587,12 +665,17 @@ def _main() -> None:
         "--fps", type=int, default=_TARGET_FPS,
         help=f"Target capture frame rate (default: {_TARGET_FPS})",
     )
+    parser.add_argument(
+        "--transparent", action="store_true",
+        help="Windows-only transparent overlay that sits on top of the game.",
+    )
     args = parser.parse_args()
 
     overlay = LiveOverlay(
         monitor=args.monitor,
         output=args.output,
         fps=args.fps,
+        transparent=args.transparent,
     )
     overlay.run()
 
