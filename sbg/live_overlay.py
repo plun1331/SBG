@@ -238,7 +238,7 @@ class LiveOverlay:
                 )
             overlay_configured = False
             overlay_hwnd = None
-            overlay_refresh_last = 0.0
+            overlay_refresh_last = time.perf_counter()
             overlay_base = None
             if overlay_only:
                 bg_color = _TRANSPARENT_KEY if transparent_mode else _OVERLAY_ONLY_BG
@@ -558,7 +558,12 @@ def _refresh_windows_overlay(hwnd: int, monitor: dict) -> None:
 
 
 def _monitor_rect(monitor: dict) -> tuple[int, int, int, int]:
-    """Return monitor bounds as integer (left, top, width, height)."""
+    """Return monitor bounds as integer (left, top, width, height).
+
+    Parameters:
+        monitor: Dict with keys ``left``, ``top``, ``width``, ``height`` as
+            provided by ``mss`` monitor metadata.
+    """
     return (
         int(monitor["left"]),
         int(monitor["top"]),
