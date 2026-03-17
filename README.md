@@ -209,6 +209,8 @@ python -m sbg.interactive_trainer --manual --model shot_model.pt --save shot_mod
 ```
 
 > **Note:** *pynput* must be installed for automatic loft/power detection.  If it is unavailable, only direction is auto-detected and you will be prompted to enter loft and power.
+>
+> **Loft baseline:** manual-mode loft is measured as scroll steps during the shot, so the starting loft is whatever the game is currently set to. For consistent labels, reset to a known loft (or correct it in the confirmation prompt) before each shot.
 
 ### Common options
 
@@ -307,4 +309,3 @@ pytest tests/
 ## License
 
 This project is provided as-is for educational and research purposes.
-
