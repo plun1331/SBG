@@ -281,17 +281,20 @@ class LiveOverlay:
 
                     # Draw overlay
                     fps_display = fps_counter.tick()
-                    annotated_full = self._draw_overlay(
-                        frame, state, fps_display, recording
-                    )
-                    annotated = (
-                        self._draw_overlay(overlay_base, state, fps_display, recording)
-                        if overlay_only
-                        else annotated_full
-                    )
+                    annotated_full = None
+                    if recording or not overlay_only:
+                        annotated_full = self._draw_overlay(
+                            frame, state, fps_display, recording
+                        )
+                    if overlay_only and overlay_base is not None:
+                        annotated = self._draw_overlay(
+                            overlay_base.copy(), state, fps_display, recording
+                        )
+                    else:
+                        annotated = annotated_full
 
                     # Write to file if recording
-                    if recording and writer is not None:
+                    if recording and writer is not None and annotated_full is not None:
                         writer.write(annotated_full)
 
                     cv2.imshow(_WINDOW_NAME, annotated)
