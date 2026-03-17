@@ -238,7 +238,7 @@ class LiveOverlay:
                 )
                 if not _is_windows_11():
                     warnings.warn(
-                        "Capture exclusion is only available on Windows 11 (build 22000+).",
+                        "Capture exclusion requires Windows 11 (build 22000+); the overlay may appear in captures.",
                         RuntimeWarning,
                     )
             if self._transparent and not transparent_mode:
@@ -248,6 +248,8 @@ class LiveOverlay:
                 )
             overlay_configured = False
             overlay_hwnd = None
+            capture_excluded = False
+            capture_exclusion_warned = False
             # self._fps is clamped to >= 1 in __init__
             overlay_base = None
             overlay_refresh_at = time.perf_counter() + _OVERLAY_REFRESH_INTERVAL
@@ -344,6 +346,20 @@ class LiveOverlay:
                         if current_time >= overlay_refresh_at:
                             _refresh_windows_overlay(overlay_hwnd, monitor)
                             overlay_refresh_at = current_time + _OVERLAY_REFRESH_INTERVAL
+                    if _is_windows_11() and not capture_excluded:
+                        hwnd = overlay_hwnd or ctypes.windll.user32.FindWindowW(
+                            None,
+                            _WINDOW_NAME,
+                        )
+                        if hwnd:
+                            if _set_window_capture_exclusion(hwnd):
+                                capture_excluded = True
+                            elif not capture_exclusion_warned:
+                                warnings.warn(
+                                    "Unable to exclude the overlay window from capture.",
+                                    RuntimeWarning,
+                                )
+                                capture_exclusion_warned = True
 
             finally:
                 if writer is not None:
@@ -519,6 +535,21 @@ def _bgr_to_windows_colorref(bgr: tuple[int, int, int]) -> int:
     return r | (g << 8) | (b << 16)
 
 
+def _set_window_capture_exclusion(hwnd: int) -> bool:
+    """Exclude the window from capture on Windows 11 using display affinity."""
+    if not _is_windows_11() or not hwnd:
+        return False
+    try:
+        return bool(
+            ctypes.windll.user32.SetWindowDisplayAffinity(
+                hwnd,
+                _WIN32_WDA_EXCLUDEFROMCAPTURE,
+            )
+        )
+    except AttributeError:
+        return False
+
+
 def _configure_windows_overlay(
     window_name: str,
     transparent_key: tuple[int, int, int],
@@ -567,21 +598,6 @@ def _configure_windows_overlay(
         height,
         _WIN32_SWP_SHOWWINDOW | _WIN32_SWP_NOACTIVATE,
     )
-    if _is_windows_11():
-        try:
-            if not ctypes.windll.user32.SetWindowDisplayAffinity(
-                hwnd,
-                _WIN32_WDA_EXCLUDEFROMCAPTURE,
-            ):
-                warnings.warn(
-                    "Unable to exclude the overlay window from capture.",
-                    RuntimeWarning,
-                )
-        except AttributeError:
-            warnings.warn(
-                "Display-affinity capture exclusion is unavailable on this Windows build.",
-                RuntimeWarning,
-            )
     return hwnd
 
 
