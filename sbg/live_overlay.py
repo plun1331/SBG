@@ -139,6 +139,7 @@ _WIN32_SWP_SHOWWINDOW = 0x0040
 _WIN32_SWP_NOACTIVATE = 0x0010
 _WIN32_SWP_NOMOVE = 0x0002
 _WIN32_SWP_NOSIZE = 0x0001
+_WIN32_WDA_EXCLUDEFROMCAPTURE = 0x00000011
 
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
@@ -492,6 +493,21 @@ def _is_windows() -> bool:
     return sys.platform.startswith("win")
 
 
+def _windows_build() -> int:
+    """Return the Windows build number or 0 when unavailable."""
+    if not _is_windows():
+        return 0
+    try:
+        return sys.getwindowsversion().build
+    except AttributeError:  # pragma: no cover - unavailable on non-Windows
+        return 0
+
+
+def _is_windows_11() -> bool:
+    """Return True when running on Windows 11 (build 22000+)."""
+    return _windows_build() >= 22000
+
+
 def _bgr_to_windows_colorref(bgr: tuple[int, int, int]) -> int:
     """Convert BGR to a Windows COLORREF integer for layered windows."""
     b, g, r = bgr
@@ -546,6 +562,26 @@ def _configure_windows_overlay(
         height,
         _WIN32_SWP_SHOWWINDOW | _WIN32_SWP_NOACTIVATE,
     )
+    if _is_windows_11():
+        try:
+            if not ctypes.windll.user32.SetWindowDisplayAffinity(
+                hwnd,
+                _WIN32_WDA_EXCLUDEFROMCAPTURE,
+            ):
+                warnings.warn(
+                    "Unable to exclude the overlay window from capture.",
+                    RuntimeWarning,
+                )
+        except AttributeError:
+            warnings.warn(
+                "Display-affinity capture exclusion is unavailable on this Windows build.",
+                RuntimeWarning,
+            )
+    else:
+        warnings.warn(
+            "Capture exclusion is only available on Windows 11 (build 22000+).",
+            RuntimeWarning,
+        )
     return hwnd
 
 

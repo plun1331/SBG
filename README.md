@@ -139,7 +139,8 @@ Keyboard shortcuts inside the overlay window:
 
 Use `--monitor` to pick which display to capture if needed.
 
-On Windows, you can enable a transparent click-through fullscreen overlay:
+On Windows 11, you can enable a transparent click-through fullscreen overlay
+that is excluded from screen capture (prevents overlay feedback/lag):
 
 ```bash
 python -m sbg.live_overlay --transparent
