@@ -508,7 +508,7 @@ def _draw_wind_vector(
     )
     angle = math.radians(wind_direction_deg)
     dx = math.cos(angle) * length
-    dy = -math.sin(angle) * length  # 0° right, 90° up; negate sin for screen y
+    dy = -math.sin(angle) * length  # 0° = +x, 90° = +y (math); invert for screen y
     end = (int(origin[0] + dx), int(origin[1] + dy))
     cv2.arrowedLine(img, origin, end, _COLOUR_WIND, 2, cv2.LINE_AA, tipLength=0.3)
 
