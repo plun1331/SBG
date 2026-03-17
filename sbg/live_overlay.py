@@ -132,6 +132,15 @@ _MAX_WIND_ARROW_LEN = 40
 _TRANSPARENT_KEY = (255, 0, 255)  # magenta stands out from overlay colors
 _OVERLAY_ONLY_BG = (0, 0, 0)
 
+# Windows API constants for layered overlay windows
+_WIN32_GWL_EXSTYLE = -20
+_WIN32_WS_EX_LAYERED = 0x00080000
+_WIN32_WS_EX_TRANSPARENT = 0x00000020
+_WIN32_WS_EX_TOOLWINDOW = 0x00000080
+_WIN32_LWA_COLORKEY = 0x00000001
+_WIN32_HWND_TOPMOST = -1
+_WIN32_SWP_SHOWWINDOW = 0x0040
+
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
 
@@ -295,7 +304,7 @@ class LiveOverlay:
                         annotated = annotated_full
 
                     # Write to file if recording
-                    if recording and writer is not None and annotated_full is not None:
+                    if recording and writer is not None:
                         writer.write(annotated_full)
 
                     cv2.imshow(_WINDOW_NAME, annotated)
@@ -480,7 +489,7 @@ def _is_windows() -> bool:
     return sys.platform.startswith("win")
 
 
-def _colorref_from_bgr(bgr: tuple[int, int, int]) -> int:
+def _bgr_to_windows_colorref(bgr: tuple[int, int, int]) -> int:
     b, g, r = bgr
     return r | (g << 8) | (b << 16)
 
@@ -506,34 +515,26 @@ def _configure_windows_overlay(
         )
         return
 
-    GWL_EXSTYLE = -20
-    WS_EX_LAYERED = 0x00080000
-    WS_EX_TRANSPARENT = 0x00000020
-    WS_EX_TOOLWINDOW = 0x00000080
-    LWA_COLORKEY = 0x00000001
-    HWND_TOPMOST = -1
-    SWP_SHOWWINDOW = 0x0040
-
-    ex_style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+    ex_style = ctypes.windll.user32.GetWindowLongW(hwnd, _WIN32_GWL_EXSTYLE)
     ctypes.windll.user32.SetWindowLongW(
         hwnd,
-        GWL_EXSTYLE,
-        ex_style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
+        _WIN32_GWL_EXSTYLE,
+        ex_style | _WIN32_WS_EX_LAYERED | _WIN32_WS_EX_TRANSPARENT | _WIN32_WS_EX_TOOLWINDOW,
     )
     ctypes.windll.user32.SetLayeredWindowAttributes(
         hwnd,
-        _colorref_from_bgr(transparent_key),
+        _bgr_to_windows_colorref(transparent_key),
         255,
-        LWA_COLORKEY,
+        _WIN32_LWA_COLORKEY,
     )
     ctypes.windll.user32.SetWindowPos(
         hwnd,
-        HWND_TOPMOST,
+        _WIN32_HWND_TOPMOST,
         int(monitor["left"]),
         int(monitor["top"]),
         int(monitor["width"]),
         int(monitor["height"]),
-        SWP_SHOWWINDOW,
+        _WIN32_SWP_SHOWWINDOW,
     )
 
 
