@@ -109,6 +109,7 @@ _FLAG_FILL_RATIO_MIN: float = 0.25
 _FLAG_TEMPLATE_SCORE_MIN: float = 0.7
 
 _FLAG_TEMPLATE_EDGES: Optional[np.ndarray] = None
+_FLAG_TEMPLATE_LOADED: bool = False
 _FLAG_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "images" / "hit_bar_closeup.png"
 
 # ---------------------------------------------------------------------------
@@ -154,10 +155,11 @@ _BAR_CROP_MIN_HEIGHT_RATIO: float = 2.0
 
 
 def _load_flag_template_edges() -> Optional[np.ndarray]:
-    global _FLAG_TEMPLATE_EDGES
-    if _FLAG_TEMPLATE_EDGES is not None:
+    global _FLAG_TEMPLATE_EDGES, _FLAG_TEMPLATE_LOADED
+    if _FLAG_TEMPLATE_LOADED:
         return _FLAG_TEMPLATE_EDGES
 
+    _FLAG_TEMPLATE_LOADED = True
     if not _FLAG_TEMPLATE_PATH.exists():
         return None
 
