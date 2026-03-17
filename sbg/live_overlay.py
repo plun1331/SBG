@@ -114,7 +114,7 @@ _PATH_RADIUS = 3
 _POWER_BAR_W = 130
 _POWER_BAR_H = 10
 _MAX_WIND_SPEED = 20.0       # Matches ScreenAnalyzer wind scaling (0–20 units)
-_MIN_WIND_SPEED = 0.1        # Below this, wind is treated as negligible
+_NEGLIGIBLE_WIND_THRESHOLD = 0.1  # Below this, wind is treated as negligible
 _OBSTACLE_THRESHOLD = 0.5    # Normalised obstacle map cutoff (0–1)
 
 # Display window name
@@ -424,11 +424,23 @@ def _format_coord(pos) -> str:
     return f"{pos.x:.0f}, {pos.y:.0f}"
 
 
+def _clamp_value(value: float, min_value: float, max_value: float) -> float:
+    return max(min_value, min(max_value, value))
+
+
 def _clamp_point(img: np.ndarray, x: float, y: float) -> tuple[int, int]:
     h, w = img.shape[:2]
-    cx = int(max(0, min(w - 1, round(x))))
-    cy = int(max(0, min(h - 1, round(y))))
+    cx = int(_clamp_value(round(x), 0, w - 1))
+    cy = int(_clamp_value(round(y), 0, h - 1))
     return cx, cy
+
+
+def _align_samples(primary: list, secondary: list) -> list:
+    target_len = len(primary)
+    aligned = list(secondary or [])
+    if len(aligned) < target_len:
+        aligned.extend([0.0] * (target_len - len(aligned)))
+    return aligned[:target_len]
 
 
 def _terrain_colour(value: float) -> tuple[int, int, int]:
@@ -458,14 +470,8 @@ def _draw_path_samples(
 ) -> None:
     if not terrain:
         return
-    obs = list(obstacles) if obstacles else []
-    if len(obs) < len(terrain):
-        obs.extend([0.0] * (len(terrain) - len(obs)))
-    elif len(obs) > len(terrain):
-        obs = obs[:len(terrain)]
+    obs = _align_samples(terrain, obstacles)
     n = len(terrain)
-    if n <= 0:
-        return
     bx, by = ball.x, ball.y
     hx, hy = hole.x, hole.y
     for i in range(n):
@@ -489,7 +495,7 @@ def _draw_wind_vector(
 ) -> None:
     h, w = img.shape[:2]
     origin = (w - 70, 40)
-    if wind_speed <= _MIN_WIND_SPEED:
+    if wind_speed <= _NEGLIGIBLE_WIND_THRESHOLD:
         cv2.circle(img, origin, 3, _COLOUR_WIND, -1, cv2.LINE_AA)
         return
     length = max(8, int(40 * min(wind_speed / _MAX_WIND_SPEED, 1.0)))
