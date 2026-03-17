@@ -244,7 +244,7 @@ class LiveOverlay:
             overlay_hwnd = None
             # self._fps is clamped to >= 1 in __init__
             overlay_base = None
-            overlay_refresh_at = 0.0
+            overlay_refresh_at = time.perf_counter() + _OVERLAY_REFRESH_INTERVAL
             if overlay_only:
                 bg_color = _TRANSPARENT_KEY if transparent_mode else _OVERLAY_ONLY_BG
                 overlay_base = np.full(
@@ -328,6 +328,11 @@ class LiveOverlay:
                             _WINDOW_NAME, _TRANSPARENT_KEY, monitor
                         )
                         overlay_configured = overlay_hwnd is not None
+                        if overlay_configured:
+                            _refresh_windows_overlay(overlay_hwnd, monitor)
+                            overlay_refresh_at = (
+                                time.perf_counter() + _OVERLAY_REFRESH_INTERVAL
+                            )
                     if transparent_mode and overlay_hwnd:
                         refresh_now = time.perf_counter()
                         if refresh_now >= overlay_refresh_at:
