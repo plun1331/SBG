@@ -146,6 +146,12 @@ On Windows 11, you can enable a transparent click-through overlay:
 python -m sbg.live_overlay --transparent
 ```
 
+To show only the UI elements (no game frame), use:
+
+```bash
+python -m sbg.live_overlay --overlay-only
+```
+
 ### Train the model
 
 Training data is stored as `.npz` files (one per sample) in a directory. Each file must contain:

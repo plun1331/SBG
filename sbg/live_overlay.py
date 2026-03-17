@@ -22,6 +22,9 @@ Usage (API)::
     overlay = LiveOverlay(transparent=True)
     overlay.run()                          # transparent overlay (Windows 11)
 
+    overlay = LiveOverlay(overlay_only=True)
+    overlay.run()                          # overlay-only window (no game frame)
+
 Keyboard shortcuts while the window is open:
 
     Q / Esc  – quit
@@ -127,6 +130,7 @@ _MAX_WIND_ARROW_LEN = 40
 
 # Transparent overlay key (BGR) used for Windows layered window colorkey
 _TRANSPARENT_KEY = (255, 0, 255)  # magenta stands out from overlay colours
+_OVERLAY_ONLY_BG = (0, 0, 0)
 
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
@@ -156,6 +160,7 @@ class LiveOverlay:
             one is created automatically.
         transparent: When True, show a click-through transparent overlay on
             Windows (uses a layered window with a color key).
+        overlay_only: When True, draw only UI elements (no game frame).
     """
 
     def __init__(
@@ -165,6 +170,7 @@ class LiveOverlay:
         fps: int = _TARGET_FPS,
         analyzer: Optional[ScreenAnalyzer] = None,
         transparent: bool = False,
+        overlay_only: bool = False,
     ) -> None:
         if not _MSS_AVAILABLE:
             raise ImportError(
@@ -176,6 +182,7 @@ class LiveOverlay:
         self._fps = max(1, fps)
         self._analyzer = analyzer or ScreenAnalyzer()
         self._transparent = transparent
+        self._overlay_only = overlay_only
 
     # ------------------------------------------------------------------
     # Public interface
@@ -210,6 +217,7 @@ class LiveOverlay:
 
             cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_NORMAL)
             transparent_mode = self._transparent and _is_windows()
+            overlay_only = self._overlay_only or transparent_mode
             if self._transparent and not transparent_mode:
                 warnings.warn(
                     "Transparent overlay is only available on Windows.",
@@ -217,11 +225,12 @@ class LiveOverlay:
                 )
             overlay_configured = False
             overlay_base = None
-            if transparent_mode:
+            if overlay_only:
+                bg_colour = _TRANSPARENT_KEY if transparent_mode else _OVERLAY_ONLY_BG
                 overlay_base = np.empty(
                     (monitor["height"], monitor["width"], 3), dtype=np.uint8
                 )
-                overlay_base[:] = _TRANSPARENT_KEY
+                overlay_base[:] = bg_colour
 
             try:
                 while True:
@@ -275,7 +284,7 @@ class LiveOverlay:
                         frame, state, fps_display, recording
                     )
                     annotated = annotated_full
-                    if transparent_mode and overlay_base is not None:
+                    if overlay_only and overlay_base is not None:
                         annotated = self._draw_overlay(
                             overlay_base, state, fps_display, recording
                         )
@@ -683,6 +692,10 @@ def _main() -> None:
         "--transparent", action="store_true",
         help="Windows-only transparent overlay that sits on top of the game.",
     )
+    parser.add_argument(
+        "--overlay-only", action="store_true",
+        help="Draw only UI elements (no captured game frame).",
+    )
     args = parser.parse_args()
 
     overlay = LiveOverlay(
@@ -690,6 +703,7 @@ def _main() -> None:
         output=args.output,
         fps=args.fps,
         transparent=args.transparent,
+        overlay_only=args.overlay_only,
     )
     overlay.run()
 
