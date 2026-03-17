@@ -135,8 +135,6 @@ _WIN32_WS_EX_NOACTIVATE = 0x08000000
 _WIN32_LWA_COLORKEY = 0x00000001
 _WIN32_HWND_TOPMOST = -1
 _WIN32_SWP_SHOWWINDOW = 0x0040
-_WIN32_SWP_NOSIZE = 0x0001
-_WIN32_SWP_NOMOVE = 0x0002
 _WIN32_SWP_NOACTIVATE = 0x0010
 
 # Display window name
@@ -239,6 +237,7 @@ class LiveOverlay:
                 )
             overlay_configured = False
             overlay_hwnd = None
+            # self._fps is clamped to >= 1 in __init__
             overlay_refresh_every = max(
                 _OVERLAY_REFRESH_MIN_FRAMES,
                 int(self._fps * _OVERLAY_REFRESH_INTERVAL),
@@ -555,10 +554,7 @@ def _refresh_windows_overlay(hwnd: int, monitor: dict) -> None:
         top,
         width,
         height,
-        _WIN32_SWP_SHOWWINDOW
-        | _WIN32_SWP_NOACTIVATE
-        | _WIN32_SWP_NOMOVE
-        | _WIN32_SWP_NOSIZE,
+        _WIN32_SWP_SHOWWINDOW | _WIN32_SWP_NOACTIVATE,
     )
 
 
