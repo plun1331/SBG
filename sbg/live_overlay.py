@@ -226,11 +226,11 @@ class LiveOverlay:
             overlay_configured = False
             overlay_base = None
             if overlay_only:
-                bg_colour = _TRANSPARENT_KEY if transparent_mode else _OVERLAY_ONLY_BG
+                bg_color = _TRANSPARENT_KEY if transparent_mode else _OVERLAY_ONLY_BG
                 overlay_base = np.empty(
                     (monitor["height"], monitor["width"], 3), dtype=np.uint8
                 )
-                overlay_base[:] = bg_colour
+                overlay_base[:] = bg_color
 
             try:
                 while True:
@@ -283,11 +283,11 @@ class LiveOverlay:
                     annotated_full = self._draw_overlay(
                         frame, state, fps_display, recording
                     )
-                    annotated = annotated_full
-                    if overlay_only and overlay_base is not None:
-                        annotated = self._draw_overlay(
-                            overlay_base, state, fps_display, recording
-                        )
+                    annotated = (
+                        self._draw_overlay(overlay_base, state, fps_display, recording)
+                        if overlay_only and overlay_base is not None
+                        else annotated_full
+                    )
 
                     # Write to file if recording
                     if recording and writer is not None:
