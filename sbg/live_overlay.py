@@ -56,12 +56,12 @@ Dependencies:
 
 from __future__ import annotations
 
-import time
-from pathlib import Path
+import ctypes
 import math
 import sys
-import ctypes
+import time
 import warnings
+from pathlib import Path
 from typing import Optional
 
 import cv2
@@ -129,7 +129,7 @@ _MIN_WIND_ARROW_LEN = 8
 _MAX_WIND_ARROW_LEN = 40
 
 # Transparent overlay key (BGR) used for Windows layered window colorkey
-_TRANSPARENT_KEY = (255, 0, 255)  # magenta stands out from overlay colours
+_TRANSPARENT_KEY = (255, 0, 255)  # magenta stands out from overlay colors
 _OVERLAY_ONLY_BG = (0, 0, 0)
 
 # Display window name
@@ -293,8 +293,6 @@ class LiveOverlay:
                         )
                     else:
                         annotated = annotated_full
-                    if annotated is None:
-                        continue
 
                     # Write to file if recording
                     if recording and writer is not None and annotated_full is not None:
@@ -492,7 +490,11 @@ def _configure_windows_overlay(
     transparent_key: tuple[int, int, int],
     monitor: dict,
 ) -> None:
-    """Configure a click-through layered window for the overlay on Windows."""
+    """Configure a click-through layered window for the overlay on Windows.
+
+    Note: this relies on a window-title lookup and can fail if the title
+    changes or another window shares the same title.
+    """
     if not _is_windows():
         return
     # OpenCV does not expose window handles directly, so fall back to title lookup.
