@@ -360,6 +360,17 @@ class TestHitBarVisibility:
         assert state.hit_bar is not None
         assert state.hit_bar.is_visible
 
+    def test_frame_with_sand_bar_is_visible(self):
+        """A tan/sand coloured bar should still be detected as visible."""
+        frame = _make_frame_with_bar(
+            w=_REF_W, h=_REF_H,
+            bar_color=(180, 200, 220),  # light sand tone
+            flag_color=(0, 0, 220),
+        )
+        state = self.analyzer.analyze(frame)
+        assert state.hit_bar is not None
+        assert state.hit_bar.is_visible
+
 
 class TestFlagDetection:
     def setup_method(self):
@@ -619,3 +630,9 @@ class TestRealScreenshots:
         self._check_common(state, "uploaded_bar_crop")
         assert state.hit_bar.is_visible
         assert state.hit_bar.flag_detected
+
+    def test_uploaded_sand_hitting_visible(self):
+        frame = _load_uploaded_screenshot("Screenshot 2026-03-17 130859.png")
+        state = self.analyzer.analyze(frame)
+        self._check_common(state, "uploaded_sand_hitting")
+        assert state.hit_bar.is_visible

@@ -88,6 +88,9 @@ _BAR_INTERIOR_START_REL: float   = 22 / 86   # ≈ 0.256
 _BAR_INTERIOR_END_REL: float     = 65 / 86   # ≈ 0.756
 # Minimum brightness drop (interior mean − border min) required on each side
 _BAR_BORDER_DIP_MIN: float       = 12.0
+# Minimum edge-contrast required at each border (used for sand/low-contrast bars)
+_BAR_BORDER_EDGE_MIN: float      = 10.0
+_BAR_BORDER_EDGE_RATIO: float    = 2.0
 
 # ---------------------------------------------------------------------------
 # HSV colour masks for flag detection (OpenCV H range 0–180)
@@ -357,7 +360,28 @@ class ScreenAnalyzer:
 
         left_dip = interior - float(left_win.min())
         right_dip = interior - float(right_win.min())
-        return left_dip >= _BAR_BORDER_DIP_MIN and right_dip >= _BAR_BORDER_DIP_MIN
+        dip_ok = left_dip >= _BAR_BORDER_DIP_MIN and right_dip >= _BAR_BORDER_DIP_MIN
+
+        # Edge-based fallback for low-contrast bars (e.g. sand scenes).
+        grad_x = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+        edge_cols = np.abs(grad_x).mean(axis=0)
+        edge_interior = float(edge_cols[int_start:int_end].mean())
+        edge_ref = max(edge_interior, 1.0)
+
+        left_edge = float(edge_cols[max(0, left_centre - hw) : left_centre + hw + 1].mean())
+        right_edge = float(edge_cols[max(0, right_centre - hw) : right_centre + hw + 1].mean())
+
+        left_edge_ok = (
+            left_edge - edge_interior >= _BAR_BORDER_EDGE_MIN
+            and left_edge / edge_ref >= _BAR_BORDER_EDGE_RATIO
+        )
+        right_edge_ok = (
+            right_edge - edge_interior >= _BAR_BORDER_EDGE_MIN
+            and right_edge / edge_ref >= _BAR_BORDER_EDGE_RATIO
+        )
+        edge_ok = left_edge_ok and right_edge_ok
+
+        return dip_ok or edge_ok
 
     @staticmethod
     def _is_bar_crop(w: int, h: int) -> bool:
