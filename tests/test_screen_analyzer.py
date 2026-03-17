@@ -25,7 +25,11 @@ from sbg.game_state import (
 )
 from sbg.screen_analyzer import (
     ScreenAnalyzer,
+    _BAR_BORDER_DIP_MIN,
+    _BAR_BORDER_WINDOW_REL,
     _BAR_H_REL,
+    _BAR_LEFT_BORDER_COL_REL,
+    _BAR_RIGHT_BORDER_COL_REL,
     _BAR_W_REL,
     _BAR_X_REL,
     _BAR_Y_REL,
@@ -58,6 +62,24 @@ def _bar_rect(w: int, h: int):
     return x0, y0, x1, y1
 
 
+def _draw_bar_dark_outline(
+    frame: np.ndarray, x0: int, y0: int, bw: int, bh: int
+) -> None:
+    """
+    Paint the two dark-border columns the visibility check looks for.
+
+    The border colour (20, 60, 30) is always ≥ 12 brightness units darker
+    than any reasonable bar-interior colour, so both dips will satisfy
+    ``_BAR_BORDER_DIP_MIN`` regardless of which bar colour is used.
+    """
+    dark_bgr = (20, 60, 30)
+    hw = max(1, int(_BAR_BORDER_WINDOW_REL * bw))
+    lc = int(_BAR_LEFT_BORDER_COL_REL * bw)
+    rc = int(_BAR_RIGHT_BORDER_COL_REL * bw)
+    frame[y0:y0 + bh, x0 + max(0, lc - hw) : x0 + lc + hw + 1] = dark_bgr
+    frame[y0:y0 + bh, x0 + max(0, rc - hw) : x0 + rc + hw + 1] = dark_bgr
+
+
 def _make_frame_with_bar(
     w: int = _REF_W,
     h: int = _REF_H,
@@ -75,9 +97,12 @@ def _make_frame_with_bar(
     # Fill bar with a saturated green (FAIRWAY)
     frame[y0:y1, x0:x1] = bar_color
 
-    # Draw a small red flag square
     bw = x1 - x0
     bh = y1 - y0
+
+    # Add the dark outline columns that the visibility check requires.
+    # Applied before the flag so that the flag patch sits on top.
+    _draw_bar_dark_outline(frame, x0, y0, bw, bh)
     fx = x0 + int(flag_x_pct * bw)
     fy = y0 + int(flag_y_pct * bh)
     # 8×8 patch
@@ -361,9 +386,12 @@ class TestTerrainClassification:
         the bottom half is another, then parse the terrain zones."""
         frame = _make_blank_frame(w, h)
         x0, y0, x1, y1 = _bar_rect(w, h)
+        bw, bh = x1 - x0, y1 - y0
         mid_y = (y0 + y1) // 2
         frame[y0:mid_y, x0:x1] = top_color
         frame[mid_y:y1, x0:x1] = bottom_color
+        # Add the dark outline so the visibility check detects this as a bar.
+        _draw_bar_dark_outline(frame, x0, y0, bw, bh)
         state = self.analyzer.analyze(frame)
         return state.hit_bar
 
@@ -380,6 +408,7 @@ class TestTerrainClassification:
         # Water bottom: simulate by using high-std blue-green alternating rows
         frame = _make_blank_frame(_REF_W, _REF_H)
         x0, y0, x1, y1 = _bar_rect(_REF_W, _REF_H)
+        bw, bh_bar = x1 - x0, y1 - y0
 
         # Top half: solid dark green (FAIRWAY)
         mid_y = (y0 + y1) // 2
@@ -393,6 +422,9 @@ class TestTerrainClassification:
                 frame[row, x0:x1] = (50, 150, 30)   # dark teal-blue
             else:
                 frame[row, x0:x1] = (200, 200, 100)  # light, high-value
+
+        # Add the dark outline so the visibility check detects this as a bar.
+        _draw_bar_dark_outline(frame, x0, y0, bw, bh_bar)
 
         bar = self.analyzer.analyze(frame)
         assert bar.hit_bar is not None
@@ -474,6 +506,10 @@ class TestRealScreenshots:
         frame = _load_screenshot("green_course_looking.png")
         state = self.analyzer.analyze(frame)
         self._check_common(state, "green_course_looking")
+        # The hit bar should NOT appear while the player is simply looking
+        assert not state.hit_bar.is_visible, (
+            "Hit bar should not be detected when looking at the course"
+        )
 
     def test_sandy_course_hitting(self):
         frame = _load_screenshot("sandy_course_hitting.png")
@@ -485,6 +521,10 @@ class TestRealScreenshots:
         frame = _load_screenshot("sandy_course_looking.png")
         state = self.analyzer.analyze(frame)
         self._check_common(state, "sandy_course_looking")
+        # The hit bar should NOT appear while the player is simply looking
+        assert not state.hit_bar.is_visible, (
+            "Hit bar should not be detected when looking at the course"
+        )
 
     def test_hit_bar_closeup_terrain_zones(self):
         """The closeup image should contain at least two distinct terrain zones."""

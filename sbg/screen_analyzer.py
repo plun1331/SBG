@@ -68,9 +68,25 @@ _BAR_Y_REL: float = 672 / 1439   # top edge of bar
 _BAR_W_REL: float = 86  / 2559   # bar width
 _BAR_H_REL: float = 574 / 1439   # bar height
 
-# Minimum fraction of bar area covered by a non-background colour for the
-# bar to be considered "visible" (i.e. the player is currently aiming).
-_BAR_VISIBILITY_MIN_SATURATION: float = 0.25
+# ---------------------------------------------------------------------------
+# Dark-outline visibility detection
+# The hit bar has a semi-transparent dark border that creates characteristic
+# brightness dips at ~17 % and ~81 % of the bar width.  Requiring *both* dips
+# to exceed the threshold discriminates the bar from the game world, which may
+# share similar colours but lacks this symmetric dark outline.
+# Column positions calibrated from 2559 × 1439 reference screenshots.
+# ---------------------------------------------------------------------------
+
+# Relative column centre of the left / right dark-border band
+_BAR_LEFT_BORDER_COL_REL: float  = 15 / 86   # ≈ 0.174
+_BAR_RIGHT_BORDER_COL_REL: float = 70 / 86   # ≈ 0.814
+# Half-width (in relative columns) of the search window around each centre
+_BAR_BORDER_WINDOW_REL: float    =  5 / 86   # ≈ 0.058
+# Interior column range (used as the brightness reference)
+_BAR_INTERIOR_START_REL: float   = 22 / 86   # ≈ 0.256
+_BAR_INTERIOR_END_REL: float     = 65 / 86   # ≈ 0.756
+# Minimum brightness drop (interior mean − border min) required on each side
+_BAR_BORDER_DIP_MIN: float       = 12.0
 
 # ---------------------------------------------------------------------------
 # HSV colour masks for flag detection (OpenCV H range 0–180)
@@ -228,11 +244,10 @@ class ScreenAnalyzer:
         if bar_crop.size == 0:
             return HitBarState(is_visible=False)
 
-        bar_hsv = cv2.cvtColor(bar_crop, cv2.COLOR_BGR2HSV)
-
-        if not self._is_bar_visible(bar_hsv):
+        if not self._is_bar_visible(bar_crop):
             return HitBarState(is_visible=False)
 
+        bar_hsv = cv2.cvtColor(bar_crop, cv2.COLOR_BGR2HSV)
         flag_dir, flag_y = self._detect_flag(bar_crop, bar_hsv)
         zones = self._classify_terrain_zones(bar_crop)
 
@@ -243,28 +258,52 @@ class ScreenAnalyzer:
             terrain_zones=zones,
         )
 
-    def _is_bar_visible(self, bar_hsv: np.ndarray) -> bool:
+    def _is_bar_visible(self, bar_bgr: np.ndarray) -> bool:
         """
-        Return True if the bar crop contains enough saturated colour to
-        indicate that the hit bar is currently displayed.
+        Return True if the bar crop shows the hit bar's characteristic dark outline.
 
-        A frame without the hit bar (e.g. when looking down the course)
-        shows the game world in that region, which has a different saturation
-        distribution than the bar's vivid UI colours.
+        The hit bar is surrounded by a semi-transparent dark border.  When the
+        bar is displayed, the per-column mean brightness of the crop has two
+        distinct dips — one on the left side (~17 % of bar width) and one on
+        the right (~81 %) — that are notably darker than the bright terrain
+        content in between.  Requiring *both* dips to be present prevents false
+        positives from the game world, which may have a dark region on one side
+        but not the other (e.g. a gradient across the frame).
 
         Parameters:
-            bar_hsv: HSV crop of the expected bar region.
+            bar_bgr: BGR crop of the expected bar region.
 
         Returns:
             bool
         """
-        # Count pixels with meaningful saturation (S > 60) and value (V > 40)
-        saturated = np.sum(
-            (bar_hsv[:, :, 1].astype(np.float32) > 60)
-            & (bar_hsv[:, :, 2].astype(np.float32) > 40)
-        )
-        total = bar_hsv.shape[0] * bar_hsv.shape[1]
-        return (saturated / total) >= _BAR_VISIBILITY_MIN_SATURATION
+        bh, bw = bar_bgr.shape[:2]
+        if bh == 0 or bw == 0:
+            return False
+
+        gray = cv2.cvtColor(bar_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        # Mean brightness per column (averaged over the full bar height)
+        col_means = gray.mean(axis=0)
+
+        # Interior brightness reference
+        int_start = max(0, int(_BAR_INTERIOR_START_REL * bw))
+        int_end = min(bw, int(_BAR_INTERIOR_END_REL * bw))
+        if int_start >= int_end:
+            return False
+        interior = float(col_means[int_start:int_end].mean())
+
+        # Minimum brightness within each border search window
+        hw = max(1, int(_BAR_BORDER_WINDOW_REL * bw))
+        left_centre = int(_BAR_LEFT_BORDER_COL_REL * bw)
+        right_centre = int(_BAR_RIGHT_BORDER_COL_REL * bw)
+
+        left_win = col_means[max(0, left_centre - hw) : left_centre + hw + 1]
+        right_win = col_means[max(0, right_centre - hw) : right_centre + hw + 1]
+        if left_win.size == 0 or right_win.size == 0:
+            return False
+
+        left_dip = interior - float(left_win.min())
+        right_dip = interior - float(right_win.min())
+        return left_dip >= _BAR_BORDER_DIP_MIN and right_dip >= _BAR_BORDER_DIP_MIN
 
     def _detect_flag(
         self,
@@ -347,18 +386,26 @@ class ScreenAnalyzer:
         Returns:
             List of ``(start_pct, end_pct, TerrainZoneType)`` tuples.
         """
-        bh = bar_bgr.shape[0]
+        bh, bw = bar_bgr.shape[:2]
         if bh == 0:
             return []
 
+        # Trim border columns so the dark outline does not inflate per-row std.
+        # Only the interior terrain content (between the two dark border bands)
+        # is needed for zone classification.
+        int_col_start = max(0, int(_BAR_INTERIOR_START_REL * bw))
+        int_col_end = min(bw, int(_BAR_INTERIOR_END_REL * bw))
+        interior_bgr = bar_bgr[:, int_col_start:int_col_end]
+
         bar_hsv = cv2.cvtColor(bar_bgr, cv2.COLOR_BGR2HSV)
+        interior_hsv = bar_hsv[:, int_col_start:int_col_end]
 
         # Per-row classification
         row_zones: List[TerrainZoneType] = []
         for y in range(bh):
-            row_bgr = bar_bgr[y, :].astype(np.float32)
-            row_h   = bar_hsv[y, :, 0].astype(np.float32)
-            mean_h  = float(row_h.mean())
+            row_bgr = interior_bgr[y].astype(np.float32)
+            row_h = interior_hsv[y, :, 0].astype(np.float32)
+            mean_h = float(row_h.mean())
             bgr_std = float(row_bgr.std())
 
             zone = self._classify_row(mean_h, bgr_std)
