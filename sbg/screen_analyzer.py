@@ -44,6 +44,7 @@ variance:
 """
 
 import math
+import warnings
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -209,6 +210,12 @@ class ScreenAnalyzer:
 
     def __init__(self, terrain_samples: int = _TERRAIN_SAMPLES) -> None:
         self._terrain_samples = terrain_samples
+        if terrain_samples != _TERRAIN_SAMPLES:
+            warnings.warn(
+                "terrain_samples is deprecated and ignored in bar-only mode.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
     # ------------------------------------------------------------------
     # Public interface

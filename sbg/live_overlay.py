@@ -161,7 +161,7 @@ class LiveOverlay:
         fps: Capture / display target frame rate.
         analyzer: A pre-built :class:`ScreenAnalyzer` instance.  If ``None``
             one is created automatically.
-        transparent: When True, show a click-through transparent overlay on
+        transparent: When True, show a click-through fullscreen overlay on
             Windows (uses a layered window with a color key). This implicitly
             enables ``overlay_only`` to avoid drawing the game frame.
         overlay_only: When True, draw only UI elements (no game frame).
