@@ -244,7 +244,7 @@ class LiveOverlay:
             overlay_hwnd = None
             # self._fps is clamped to >= 1 in __init__
             overlay_base = None
-            overlay_refresh_at = time.perf_counter() + _OVERLAY_REFRESH_INTERVAL
+            overlay_refresh_at = time.perf_counter()
             if overlay_only:
                 bg_color = _TRANSPARENT_KEY if transparent_mode else _OVERLAY_ONLY_BG
                 overlay_base = np.full(
