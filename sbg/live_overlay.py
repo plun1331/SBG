@@ -343,15 +343,15 @@ class LiveOverlay:
                         if current_time >= overlay_refresh_at:
                             _refresh_windows_overlay(overlay_hwnd, monitor)
                             overlay_refresh_at = current_time + _OVERLAY_REFRESH_INTERVAL
-                    if transparent_mode:
-                        if _is_windows() and not _is_windows_11():
+                    if transparent_mode and _is_windows():
+                        if not _is_windows_11():
                             if not capture_exclusion_warned:
                                 warnings.warn(
                                     "Capture exclusion requires Windows 11 (build 22000+); the overlay may appear in captures.",
                                     RuntimeWarning,
                                 )
                                 capture_exclusion_warned = True
-                        elif _is_windows_11() and not capture_excluded and capture_hwnd:
+                        elif not capture_excluded and capture_hwnd:
                             exclusion_result = _set_window_capture_exclusion(capture_hwnd)
                             if exclusion_result:
                                 capture_excluded = True
