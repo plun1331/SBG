@@ -88,9 +88,9 @@ _BAR_INTERIOR_START_REL: float   = 22 / 86   # ≈ 0.256
 _BAR_INTERIOR_END_REL: float     = 65 / 86   # ≈ 0.756
 # Minimum brightness drop (interior mean − border min) required on each side
 _BAR_BORDER_DIP_MIN: float       = 12.0
-# Minimum edge-contrast required at each border (used for sand/low-contrast bars)
-_BAR_BORDER_EDGE_MIN: float      = 10.0
-_BAR_BORDER_EDGE_RATIO: float    = 2.0
+# Edge-based straight-line detection (used for sand/low-contrast bars)
+_BAR_BORDER_EDGE_GRAD_MIN: float      = 20.0
+_BAR_BORDER_EDGE_ROW_RATIO_MIN: float = 0.8
 
 # ---------------------------------------------------------------------------
 # HSV colour masks for flag detection (OpenCV H range 0–180)
@@ -364,24 +364,20 @@ class ScreenAnalyzer:
 
         # Edge-based fallback for low-contrast bars (e.g. sand scenes).
         grad_x = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
-        edge_cols = np.abs(grad_x).mean(axis=0)
-        edge_interior = float(edge_cols[int_start:int_end].mean())
-        edge_ref = max(edge_interior, 1.0)
+        edge_mask = np.abs(grad_x) >= _BAR_BORDER_EDGE_GRAD_MIN
 
-        left_edge = float(edge_cols[max(0, left_centre - hw) : left_centre + hw + 1].mean())
-        right_edge = float(edge_cols[max(0, right_centre - hw) : right_centre + hw + 1].mean())
+        left_cols = edge_mask[:, max(0, left_centre - hw) : left_centre + hw + 1]
+        right_cols = edge_mask[:, max(0, right_centre - hw) : right_centre + hw + 1]
 
-        left_edge_ok = (
-            left_edge - edge_interior >= _BAR_BORDER_EDGE_MIN
-            and left_edge / edge_ref >= _BAR_BORDER_EDGE_RATIO
+        left_ratio = float(np.mean(np.any(left_cols, axis=1))) if left_cols.size else 0.0
+        right_ratio = float(np.mean(np.any(right_cols, axis=1))) if right_cols.size else 0.0
+
+        line_ok = (
+            left_ratio >= _BAR_BORDER_EDGE_ROW_RATIO_MIN
+            and right_ratio >= _BAR_BORDER_EDGE_ROW_RATIO_MIN
         )
-        right_edge_ok = (
-            right_edge - edge_interior >= _BAR_BORDER_EDGE_MIN
-            and right_edge / edge_ref >= _BAR_BORDER_EDGE_RATIO
-        )
-        edge_ok = left_edge_ok and right_edge_ok
 
-        return dip_ok or edge_ok
+        return dip_ok or line_ok
 
     @staticmethod
     def _is_bar_crop(w: int, h: int) -> bool:
