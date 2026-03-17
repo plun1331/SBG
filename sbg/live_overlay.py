@@ -307,6 +307,8 @@ class LiveOverlay:
                         annotated = annotated_full
 
                     # Write to file if recording
+                    if recording and annotated_full is None:
+                        annotated_full = annotated
                     if recording and writer is not None:
                         writer.write(annotated_full)
 
@@ -524,7 +526,10 @@ def _configure_windows_overlay(
     ctypes.windll.user32.SetWindowLongW(
         hwnd,
         _WIN32_GWL_EXSTYLE,
-        ex_style | _WIN32_WS_EX_LAYERED | _WIN32_WS_EX_TRANSPARENT | _WIN32_WS_EX_TOOLWINDOW,
+        ex_style
+        | _WIN32_WS_EX_LAYERED
+        | _WIN32_WS_EX_TRANSPARENT
+        | _WIN32_WS_EX_TOOLWINDOW,
     )
     ctypes.windll.user32.SetLayeredWindowAttributes(
         hwnd,
