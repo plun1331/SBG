@@ -149,7 +149,7 @@ _TARGET_FPS: int = 30
 # Default output video codec and extension
 _FOURCC = "mp4v"
 _OUTPUT_EXT = ".mp4"
-_OVERLAY_REFRESH_INTERVAL = 0.2  # seconds between topmost refreshes
+_OVERLAY_REFRESH_INTERVAL = 0.5  # seconds between topmost refreshes
 
 
 class LiveOverlay:
@@ -244,7 +244,7 @@ class LiveOverlay:
             overlay_hwnd = None
             # self._fps is clamped to >= 1 in __init__
             overlay_base = None
-            overlay_refresh_at = time.perf_counter()
+            overlay_refresh_at = 0.0
             if overlay_only:
                 bg_color = _TRANSPARENT_KEY if transparent_mode else _OVERLAY_ONLY_BG
                 overlay_base = np.full(
