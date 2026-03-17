@@ -236,6 +236,11 @@ class LiveOverlay:
                 cv2.setWindowProperty(
                     _WINDOW_NAME, cv2.WND_PROP_TOPMOST, 1
                 )
+                if not _is_windows_11():
+                    warnings.warn(
+                        "Capture exclusion is only available on Windows 11 (build 22000+).",
+                        RuntimeWarning,
+                    )
             if self._transparent and not transparent_mode:
                 warnings.warn(
                     "Transparent overlay is only available on Windows.",
@@ -577,11 +582,6 @@ def _configure_windows_overlay(
                 "Display-affinity capture exclusion is unavailable on this Windows build.",
                 RuntimeWarning,
             )
-    else:
-        warnings.warn(
-            "Capture exclusion is only available on Windows 11 (build 22000+).",
-            RuntimeWarning,
-        )
     return hwnd
 
 
