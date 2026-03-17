@@ -245,6 +245,8 @@ class LiveOverlay:
             overlay_hwnd = None
             capture_excluded = False
             capture_exclusion_warned = False
+            capture_exclusion_checked = False
+            capture_exclusion_available = _is_windows_11()
             # self._fps is clamped to >= 1 in __init__
             overlay_base = None
             overlay_refresh_at = time.perf_counter() + _OVERLAY_REFRESH_INTERVAL
@@ -336,9 +338,11 @@ class LiveOverlay:
                             overlay_refresh_at = (
                                 time.perf_counter() + _OVERLAY_REFRESH_INTERVAL
                             )
-                            if _is_windows():
+                            if _is_windows() and not capture_exclusion_checked:
+                                capture_exclusion_checked = True
                                 capture_excluded, warning_message = _capture_exclusion_status(
-                                    overlay_hwnd
+                                    overlay_hwnd,
+                                    capture_exclusion_available,
                                 )
                                 if warning_message and not capture_exclusion_warned:
                                     warnings.warn(warning_message, RuntimeWarning)
@@ -538,9 +542,12 @@ def _set_window_capture_exclusion(hwnd: int) -> Optional[bool]:
         return None
 
 
-def _capture_exclusion_status(hwnd: int) -> tuple[bool, Optional[str]]:
+def _capture_exclusion_status(
+    hwnd: int,
+    capture_exclusion_available: bool,
+) -> tuple[bool, Optional[str]]:
     """Return (excluded, warning_message) for capture exclusion attempts."""
-    if not _is_windows_11():
+    if not capture_exclusion_available:
         return False, "Capture exclusion requires Windows 11 (build 22000+); the overlay may appear in captures."
     exclusion_result = _set_window_capture_exclusion(hwnd)
     if exclusion_result:
