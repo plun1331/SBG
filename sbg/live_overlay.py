@@ -334,10 +334,10 @@ class LiveOverlay:
                                 time.perf_counter() + _OVERLAY_REFRESH_INTERVAL
                             )
                     if transparent_mode and overlay_hwnd:
-                        refresh_now = time.perf_counter()
-                        if refresh_now >= overlay_refresh_at:
+                        current_time = time.perf_counter()
+                        if current_time >= overlay_refresh_at:
                             _refresh_windows_overlay(overlay_hwnd, monitor)
-                            overlay_refresh_at = refresh_now + _OVERLAY_REFRESH_INTERVAL
+                            overlay_refresh_at = current_time + _OVERLAY_REFRESH_INTERVAL
 
             finally:
                 if writer is not None:
