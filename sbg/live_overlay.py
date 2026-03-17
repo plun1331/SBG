@@ -236,11 +236,6 @@ class LiveOverlay:
                 cv2.setWindowProperty(
                     _WINDOW_NAME, cv2.WND_PROP_TOPMOST, 1
                 )
-                if not _is_windows_11():
-                    warnings.warn(
-                        "Capture exclusion requires Windows 11 (build 22000+); the overlay may appear in captures.",
-                        RuntimeWarning,
-                    )
             if self._transparent and not transparent_mode:
                 warnings.warn(
                     "Transparent overlay is only available on Windows.",
@@ -250,6 +245,7 @@ class LiveOverlay:
             overlay_hwnd = None
             capture_excluded = False
             capture_exclusion_warned = False
+            capture_hwnd = None
             # self._fps is clamped to >= 1 in __init__
             overlay_base = None
             overlay_refresh_at = time.perf_counter() + _OVERLAY_REFRESH_INTERVAL
@@ -346,13 +342,21 @@ class LiveOverlay:
                         if current_time >= overlay_refresh_at:
                             _refresh_windows_overlay(overlay_hwnd, monitor)
                             overlay_refresh_at = current_time + _OVERLAY_REFRESH_INTERVAL
+                    if transparent_mode and _is_windows() and not _is_windows_11():
+                        if not capture_exclusion_warned:
+                            warnings.warn(
+                                "Capture exclusion requires Windows 11 (build 22000+); the overlay may appear in captures.",
+                                RuntimeWarning,
+                            )
+                            capture_exclusion_warned = True
                     if _is_windows_11() and not capture_excluded:
-                        hwnd = overlay_hwnd or ctypes.windll.user32.FindWindowW(
-                            None,
-                            _WINDOW_NAME,
-                        )
-                        if hwnd:
-                            if _set_window_capture_exclusion(hwnd):
+                        if capture_hwnd is None:
+                            capture_hwnd = overlay_hwnd or ctypes.windll.user32.FindWindowW(
+                                None,
+                                _WINDOW_NAME,
+                            )
+                        if capture_hwnd:
+                            if _set_window_capture_exclusion(capture_hwnd):
                                 capture_excluded = True
                             elif not capture_exclusion_warned:
                                 warnings.warn(
