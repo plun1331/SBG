@@ -508,7 +508,7 @@ def _windows_build() -> int:
         return 0
     try:
         return sys.getwindowsversion().build
-    except AttributeError:  # pragma: no cover - unavailable on some Windows builds
+    except AttributeError:  # pragma: no cover - defensive fallback
         return 0
 
 
@@ -541,9 +541,7 @@ def _set_window_capture_exclusion(hwnd: int) -> Optional[bool]:
 def _capture_exclusion_status(hwnd: int) -> tuple[bool, Optional[str]]:
     """Return (excluded, warning_message) for capture exclusion attempts."""
     if not _is_windows_11():
-        return False, (
-            "Capture exclusion requires Windows 11 (build 22000+); the overlay may appear in captures."
-        )
+        return False, "Capture exclusion requires Windows 11 (build 22000+); the overlay may appear in captures."
     exclusion_result = _set_window_capture_exclusion(hwnd)
     if exclusion_result:
         return True, None
