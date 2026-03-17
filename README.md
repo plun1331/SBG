@@ -49,6 +49,14 @@ Game Screen Image
 ┌─────────────────────────┐
 │     ShotParameters      │  ← direction_deg, power, loft_deg
 └─────────────────────────┘
+       │
+       ▼
+┌─────────────────────────┐
+│     GameController      │  ← Translates params to OS mouse inputs
+│  ├─ look(direction_deg) │     mouse move left/right
+│  ├─ adjust_loft(deg)    │     scroll wheel up/down
+│  └─ shoot(power)        │     hold left-click
+└─────────────────────────┘
 ```
 
 ## Project Structure
@@ -56,16 +64,20 @@ Game Screen Image
 ```
 SBG/
 ├── sbg/
-│   ├── __init__.py          # Package exports
-│   ├── game_state.py        # GameState, HitBarState, ShotParameters dataclasses
-│   ├── live_overlay.py      # Live screen overlay + recording
-│   ├── model.py             # ShotPredictorModel (PyTorch)
-│   ├── screen_analyzer.py   # OpenCV-based screen parsing
-│   ├── shot_predictor.py    # End-to-end predictor (ScreenAnalyzer + model)
-│   └── train.py             # Training loop, ShotDataset, loss function
+│   ├── __init__.py             # Package exports
+│   ├── controller.py           # GameController – translates params to mouse inputs
+│   ├── game_state.py           # GameState, HitBarState, ShotParameters dataclasses
+│   ├── interactive_trainer.py  # Human-in-the-loop training (AI + manual modes)
+│   ├── live_overlay.py         # Live screen overlay + recording
+│   ├── model.py                # ShotPredictorModel (PyTorch)
+│   ├── screen_analyzer.py      # OpenCV-based screen parsing
+│   ├── shot_predictor.py       # End-to-end predictor (ScreenAnalyzer + model)
+│   └── train.py                # Training loop, ShotDataset, loss function
 ├── tests/
+│   ├── test_controller.py
+│   ├── test_interactive_trainer.py
 │   └── test_screen_analyzer.py
-├── images/                  # Example annotated screenshots
+├── images/                     # Example annotated screenshots
 ├── requirements.txt
 └── README.md
 ```
@@ -78,6 +90,8 @@ SBG/
 - NumPy ≥ 1.24
 - Pillow ≥ 10.0
 - torchvision ≥ 0.15
+- pyautogui ≥ 0.9.54  *(AI shot execution)*
+- pynput ≥ 1.7.7  *(manual-mode parameter detection)*
 
 Install all dependencies:
 
@@ -100,6 +114,18 @@ params = predictor.predict_from_frame(frame)
 print(f"Direction: {params.direction_deg:.1f}°")
 print(f"Power:     {params.power:.2f}")
 print(f"Loft:      {params.loft_deg:.1f}°")
+```
+
+### Execute a shot automatically
+
+```python
+from sbg import GameController, ControllerConfig
+
+ctrl = GameController(ControllerConfig(
+    pixels_per_degree=8.0,    # tune to match your game's mouse sensitivity
+    max_power_hold_s=2.0,     # seconds for full-power hold
+))
+ctrl.execute_shot(direction_deg=3.5, power=0.75, loft_deg=20.0)
 ```
 
 ### Analyse a screen without a model
@@ -152,9 +178,71 @@ To show only the UI elements (no game frame), use:
 python -m sbg.live_overlay --overlay-only
 ```
 
-### Train the model
+## Interactive Training
 
-Training data is stored as `.npz` files (one per sample) in a directory. Each file must contain:
+The interactive trainer lets you teach the model by rating real shots — either let the AI play and score its shots, or play yourself and have your technique recorded automatically.
+
+### AI mode (model executes shots)
+
+The model predicts shot parameters, the `GameController` executes them via mouse inputs, and you score the outcome on a 1–10 scale.
+
+```bash
+python -m sbg.interactive_trainer --model shot_model.pt --save shot_model.pt
+```
+
+High-scoring shots (≥ 6 by default) trigger an immediate online gradient update.  All scored shots are also saved as `.npz` files for offline retraining.
+
+### Manual mode (you execute shots)
+
+You play the game yourself.  The trainer automatically detects your parameters as you play:
+
+| Parameter | How detected |
+|---|---|
+| **Direction** | Read from the hit-bar flag position in the screenshot |
+| **Loft** | Scroll-wheel steps counted by a background mouse listener |
+| **Power** | Left-mouse hold duration measured by the same listener |
+
+No typing required — after your shot you only enter a score (1–10).
+
+```bash
+python -m sbg.interactive_trainer --manual --model shot_model.pt --save shot_model.pt
+```
+
+> **Note:** *pynput* must be installed for automatic loft/power detection.  If it is unavailable, only direction is auto-detected and you will be prompted to enter loft and power.
+
+### Common options
+
+| Flag | Default | Description |
+|---|---|---|
+| `--model PATH` | *(none)* | Load existing model weights |
+| `--save PATH` | *(none)* | Save model after each online update |
+| `--data-dir DIR` | `data/` | Directory for scored `.npz` samples |
+| `--manual` | off | Enable manual training mode |
+| `--no-online` | off | Save samples only, no live gradient updates |
+| `--min-score N` | `6` | Min score for online update in AI mode |
+| `--lr FLOAT` | `1e-4` | Online learning rate |
+| `--monitor N` | `1` | Monitor index (1-based) |
+| `--shot-timeout S` | `60` | Seconds to wait for a manual shot |
+
+### API usage
+
+```python
+from sbg import InteractiveTrainer
+
+trainer = InteractiveTrainer(
+    model_path="shot_model.pt",
+    data_dir="data/",
+    online_learning=True,
+    online_min_score=7,
+    save_path="shot_model.pt",
+)
+trainer.run()            # AI mode
+trainer.run(manual=True) # manual mode
+```
+
+## Training
+
+Training data is stored as `.npz` files (one per sample).  Files produced by the interactive trainer include an optional `score` field that is used as a per-sample loss weight during offline retraining — high-quality shots (score 10) contribute ten times more than minimal shots (score 1).
 
 | Key | Shape | Description |
 |---|---|---|
@@ -163,16 +251,17 @@ Training data is stored as `.npz` files (one per sample) in a directory. Each fi
 | `direction` | scalar float | Ground-truth aim offset (degrees) |
 | `power` | scalar float | Ground-truth power in [0, 1] |
 | `loft` | scalar float | Ground-truth loft angle (degrees) |
+| `score` | scalar float | *Optional* shot quality score (1–10); defaults to 5 |
 
 ```python
 from sbg.train import train
 
 model = train(
     data_dir="data/",
-    output_path="shot_model.pt",
+    save_path="shot_model.pt",
     epochs=100,
     batch_size=32,
-    learning_rate=1e-3,
+    lr=1e-3,
 )
 ```
 
@@ -183,6 +272,8 @@ model = train(
 The hit bar is the vertical UI element on the left side of the screen that encodes:
 - **Flag position** – horizontal offset maps to aim direction; vertical position encodes distance to hole.
 - **Terrain zones** – colour-coded rows indicate FAIRWAY, ROUGH_OOB, or WATER_OOB along the ball's flight path.
+
+Shots without a detected flag are automatically ignored by the interactive trainer — only frames where the flag is clearly visible are recorded.
 
 ### Feature Vector (11 dimensions)
 
@@ -198,6 +289,14 @@ The hit bar is the vertical UI element on the left side of the screen that encod
 | `power` | sigmoid | 0 to 1 |
 | `loft_deg` | sigmoid × 90 | 0° to 90° |
 
+### GameController Calibration
+
+Two `ControllerConfig` parameters need to match your in-game settings:
+
+- **`pixels_per_degree`** – how many pixels of mouse movement rotate the camera by 1°.  Adjust until the AI aims at the correct direction.
+- **`max_power_hold_s`** – seconds of holding left-click that produces a 100% power shot.  Watch the power bar to calibrate.
+- **`scroll_steps_per_degree`** – scroll clicks per 1° of loft.  This also drives the loft decoder in manual mode.
+
 ## Running Tests
 
 ```bash
@@ -208,3 +307,4 @@ pytest tests/
 ## License
 
 This project is provided as-is for educational and research purposes.
+

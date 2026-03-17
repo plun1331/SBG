@@ -10,6 +10,8 @@ from sbg.screen_analyzer import ScreenAnalyzer
 from sbg.model import ShotPredictorModel
 from sbg.shot_predictor import ShotPredictor
 from sbg.live_overlay import LiveOverlay
+from sbg.controller import GameController, ControllerConfig
+from sbg.interactive_trainer import InteractiveTrainer
 
 __all__ = [
     "GameState",
@@ -20,4 +22,7 @@ __all__ = [
     "ShotPredictorModel",
     "ShotPredictor",
     "LiveOverlay",
+    "GameController",
+    "ControllerConfig",
+    "InteractiveTrainer",
 ]
