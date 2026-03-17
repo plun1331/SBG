@@ -155,6 +155,9 @@ _TERRAIN_SAMPLES: int = 16
 _BAR_CROP_ASPECT_MAX: float = 0.35
 _BAR_CROP_MIN_HEIGHT_RATIO: float = 2.0
 
+# Default bar-only values for non-bar fields
+_DEFAULT_DISTANCE_TO_HOLE: float = 0.0
+
 
 def _load_flag_template_edges() -> Optional[np.ndarray]:
     global _FLAG_TEMPLATE_EDGES, _FLAG_TEMPLATE_LOADED
@@ -247,7 +250,7 @@ class ScreenAnalyzer:
             terrain_elevation=[],
             obstacle_map=[],
             power_gauge=0.5,
-            distance_to_hole=0.0,
+            distance_to_hole=_DEFAULT_DISTANCE_TO_HOLE,
             hit_bar=hit_bar,
         )
 
