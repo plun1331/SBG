@@ -113,9 +113,9 @@ _MARKER_RADIUS = 6
 _PATH_RADIUS = 3
 _POWER_BAR_W = 130
 _POWER_BAR_H = 10
-_MAX_WIND_SPEED = 20.0
-_MIN_WIND_SPEED = 0.1
-_OBSTACLE_THRESHOLD = 0.5
+_MAX_WIND_SPEED = 20.0       # Matches ScreenAnalyzer wind scaling (0–20 units)
+_MIN_WIND_SPEED = 0.1        # Below this, wind is treated as negligible
+_OBSTACLE_THRESHOLD = 0.5    # Normalised obstacle map cutoff (0–1)
 
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
@@ -424,14 +424,14 @@ def _format_coord(pos) -> str:
     return f"{pos.x:.0f}, {pos.y:.0f}"
 
 
-def _clamp_point(img: np.ndarray, x: float, y: float) -> tuple:
+def _clamp_point(img: np.ndarray, x: float, y: float) -> tuple[int, int]:
     h, w = img.shape[:2]
     cx = int(max(0, min(w - 1, round(x))))
     cy = int(max(0, min(h - 1, round(y))))
     return cx, cy
 
 
-def _terrain_colour(value: float) -> tuple:
+def _terrain_colour(value: float) -> tuple[int, int, int]:
     v = max(0.0, min(1.0, value))
     green = int(80 + 150 * v)
     return (40, green, 40)
