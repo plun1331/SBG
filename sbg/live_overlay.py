@@ -506,7 +506,7 @@ def _draw_wind_vector(
     )
     angle = math.radians(wind_direction_deg)
     dx = math.cos(angle) * length
-    dy = -math.sin(angle) * length
+    dy = -math.sin(angle) * length  # invert y-axis for screen coordinates
     end = (int(origin[0] + dx), int(origin[1] + dy))
     cv2.arrowedLine(img, origin, end, _COLOUR_WIND, 2, cv2.LINE_AA, tipLength=0.3)
 
@@ -517,7 +517,7 @@ def _draw_power_gauge(img: np.ndarray, power: float) -> None:
     y0 = max(12, h - 28)
     x1 = x0 + _POWER_BAR_W
     y1 = y0 + _POWER_BAR_H
-    fill = int(x0 + _POWER_BAR_W * max(0.0, min(1.0, power)))
+    fill = int(x0 + _POWER_BAR_W * _clamp_value(power, 0.0, 1.0))
     cv2.rectangle(img, (x0, y0), (x1, y1), _TEXT_SHADOW, 1)
     cv2.rectangle(img, (x0, y0), (fill, y1), _COLOUR_POWER, -1)
     cv2.putText(
