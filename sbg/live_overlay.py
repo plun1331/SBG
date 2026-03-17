@@ -58,6 +58,7 @@ from pathlib import Path
 import math
 import sys
 import ctypes
+import warnings
 from typing import Optional
 
 import cv2
@@ -125,7 +126,7 @@ _MIN_WIND_ARROW_LEN = 8
 _MAX_WIND_ARROW_LEN = 40
 
 # Transparent overlay key (BGR) used for Windows layered window colorkey
-_TRANSPARENT_KEY = (255, 0, 255)  # magenta
+_TRANSPARENT_KEY = (255, 0, 255)  # magenta stands out from overlay colours
 
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
@@ -209,7 +210,18 @@ class LiveOverlay:
 
             cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_NORMAL)
             transparent_mode = self._transparent and _is_windows()
+            if self._transparent and not transparent_mode:
+                warnings.warn(
+                    "Transparent overlay is only available on Windows.",
+                    RuntimeWarning,
+                )
             overlay_configured = False
+            overlay_base = None
+            if transparent_mode:
+                overlay_base = np.empty(
+                    (monitor["height"], monitor["width"], 3), dtype=np.uint8
+                )
+                overlay_base[:] = _TRANSPARENT_KEY
 
             try:
                 while True:
@@ -263,9 +275,7 @@ class LiveOverlay:
                         frame, state, fps_display, recording
                     )
                     annotated = annotated_full
-                    if transparent_mode:
-                        overlay_base = np.empty_like(frame)
-                        overlay_base[:] = _TRANSPARENT_KEY
+                    if transparent_mode and overlay_base is not None:
                         annotated = self._draw_overlay(
                             overlay_base, state, fps_display, recording
                         )
@@ -471,6 +481,10 @@ def _configure_windows_overlay(
         return
     hwnd = ctypes.windll.user32.FindWindowW(None, window_name)
     if not hwnd:
+        warnings.warn(
+            "Unable to find overlay window handle; transparent mode disabled.",
+            RuntimeWarning,
+        )
         return
 
     GWL_EXSTYLE = -20
