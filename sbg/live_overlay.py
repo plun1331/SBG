@@ -130,12 +130,15 @@ _OVERLAY_ONLY_BG = (0, 0, 0)
 _WIN32_GWL_EXSTYLE = -20
 _WIN32_WS_EX_LAYERED = 0x00080000
 _WIN32_WS_EX_TRANSPARENT = 0x00000020
+_WIN32_WS_EX_TOPMOST = 0x00000008
 _WIN32_WS_EX_TOOLWINDOW = 0x00000080
 _WIN32_WS_EX_NOACTIVATE = 0x08000000
 _WIN32_LWA_COLORKEY = 0x00000001
 _WIN32_HWND_TOPMOST = -1
 _WIN32_SWP_SHOWWINDOW = 0x0040
 _WIN32_SWP_NOACTIVATE = 0x0010
+_WIN32_SWP_NOMOVE = 0x0002
+_WIN32_SWP_NOSIZE = 0x0001
 
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
@@ -227,6 +230,9 @@ class LiveOverlay:
             if transparent_mode:
                 cv2.setWindowProperty(
                     _WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN
+                )
+                cv2.setWindowProperty(
+                    _WINDOW_NAME, cv2.WND_PROP_TOPMOST, 1
                 )
             if self._transparent and not transparent_mode:
                 warnings.warn(
@@ -510,6 +516,7 @@ def _configure_windows_overlay(
         ex_style
         | _WIN32_WS_EX_LAYERED
         | _WIN32_WS_EX_TRANSPARENT
+        | _WIN32_WS_EX_TOPMOST
         | _WIN32_WS_EX_TOOLWINDOW
         | _WIN32_WS_EX_NOACTIVATE,
     )
@@ -536,15 +543,17 @@ def _refresh_windows_overlay(hwnd: int, monitor: dict) -> None:
     """Re-assert topmost positioning for the transparent overlay on Windows."""
     if not _is_windows() or not hwnd:
         return
-    left, top, width, height = _monitor_bounds(monitor)
     ctypes.windll.user32.SetWindowPos(
         hwnd,
         _WIN32_HWND_TOPMOST,
-        left,
-        top,
-        width,
-        height,
-        _WIN32_SWP_SHOWWINDOW | _WIN32_SWP_NOACTIVATE,
+        0,
+        0,
+        0,
+        0,
+        _WIN32_SWP_SHOWWINDOW
+        | _WIN32_SWP_NOACTIVATE
+        | _WIN32_SWP_NOMOVE
+        | _WIN32_SWP_NOSIZE,
     )
 
 
