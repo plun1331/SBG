@@ -147,7 +147,7 @@ _TARGET_FPS: int = 30
 _FOURCC = "mp4v"
 _OUTPUT_EXT = ".mp4"
 _OVERLAY_REFRESH_INTERVAL = 0.5  # seconds between topmost refreshes
-_OVERLAY_REFRESH_MIN_FRAMES = 1  # minimum refresh cadence in frames
+_OVERLAY_REFRESH_MIN_FRAMES = 15  # minimum refresh cadence in frames (~0.5s @ 30fps)
 
 
 class LiveOverlay:
@@ -564,6 +564,9 @@ def _monitor_bounds(monitor: dict) -> tuple[int, int, int, int]:
     Parameters:
         monitor: Dict with keys ``left``, ``top``, ``width``, ``height`` as
             provided by ``mss`` monitor metadata.
+
+    Returns:
+        Tuple of ``(left, top, width, height)`` integers for positioning calls.
     """
     return (
         int(monitor["left"]),
