@@ -114,6 +114,8 @@ _PATH_RADIUS = 3
 _POWER_BAR_W = 130
 _POWER_BAR_H = 10
 _MAX_WIND_SPEED = 20.0
+_MIN_WIND_SPEED = 0.1
+_OBSTACLE_THRESHOLD = 0.5
 
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
@@ -471,7 +473,7 @@ def _draw_path_samples(
         px = bx + t * (hx - bx)
         py = by + t * (hy - by)
         cx, cy = _clamp_point(img, px, py)
-        if obs[i] >= 0.5:
+        if obs[i] >= _OBSTACLE_THRESHOLD:
             colour = _COLOUR_OBSTACLE
             radius = _PATH_RADIUS + 1
         else:
@@ -487,7 +489,7 @@ def _draw_wind_vector(
 ) -> None:
     h, w = img.shape[:2]
     origin = (w - 70, 40)
-    if wind_speed <= 0.1:
+    if wind_speed <= _MIN_WIND_SPEED:
         cv2.circle(img, origin, 3, _COLOUR_WIND, -1, cv2.LINE_AA)
         return
     length = max(8, int(40 * min(wind_speed / _MAX_WIND_SPEED, 1.0)))
