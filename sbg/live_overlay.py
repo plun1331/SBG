@@ -159,7 +159,8 @@ class LiveOverlay:
         analyzer: A pre-built :class:`ScreenAnalyzer` instance.  If ``None``
             one is created automatically.
         transparent: When True, show a click-through transparent overlay on
-            Windows (uses a layered window with a color key).
+            Windows (uses a layered window with a color key). This implicitly
+            enables ``overlay_only`` to avoid drawing the game frame.
         overlay_only: When True, draw only UI elements (no game frame).
     """
 
@@ -292,6 +293,8 @@ class LiveOverlay:
                         )
                     else:
                         annotated = annotated_full
+                    if annotated is None:
+                        continue
 
                     # Write to file if recording
                     if recording and writer is not None and annotated_full is not None:
@@ -492,6 +495,7 @@ def _configure_windows_overlay(
     """Configure a click-through layered window for the overlay on Windows."""
     if not _is_windows():
         return
+    # OpenCV does not expose window handles directly, so fall back to title lookup.
     hwnd = ctypes.windll.user32.FindWindowW(None, window_name)
     if not hwnd:
         warnings.warn(
