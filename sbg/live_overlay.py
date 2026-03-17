@@ -113,6 +113,7 @@ _MARKER_RADIUS = 6
 _PATH_RADIUS = 3
 _POWER_BAR_W = 130
 _POWER_BAR_H = 10
+_MAX_WIND_SPEED = 20.0
 
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
@@ -351,8 +352,8 @@ class LiveOverlay:
 
         if state is not None:
             info_lines = [
-                f"BALL {state.ball_position.x:.0f},{state.ball_position.y:.0f}",
-                f"HOLE {state.hole_position.x:.0f},{state.hole_position.y:.0f}",
+                f"BALL {state.ball_position.x:.0f}, {state.ball_position.y:.0f}",
+                f"HOLE {state.hole_position.x:.0f}, {state.hole_position.y:.0f}",
                 f"DIST {state.distance_to_hole:.0f}",
                 f"WIND {state.wind_speed:.1f} @ {state.wind_direction_deg:.0f}°",
                 f"POWER {state.power_gauge:.2f}",
@@ -461,7 +462,8 @@ def _draw_path_samples(
         px = bx + t * (hx - bx)
         py = by + t * (hy - by)
         cx, cy = _clamp_point(img, px, py)
-        if obstacles and obstacles[i] >= 0.5:
+        obs_val = obstacles[i] if i < len(obstacles) else 0.0
+        if obs_val >= 0.5:
             colour = _COLOUR_OBSTACLE
             radius = _PATH_RADIUS + 1
         else:
@@ -480,7 +482,7 @@ def _draw_wind_vector(
     if wind_speed <= 0.1:
         cv2.circle(img, origin, 3, _COLOUR_WIND, -1, cv2.LINE_AA)
         return
-    length = max(8, int(40 * min(wind_speed / 20.0, 1.0)))
+    length = max(8, int(40 * min(wind_speed / _MAX_WIND_SPEED, 1.0)))
     angle = math.radians(wind_direction_deg)
     dx = math.cos(angle) * length
     dy = -math.sin(angle) * length
