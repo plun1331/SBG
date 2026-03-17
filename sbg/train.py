@@ -18,6 +18,10 @@ Each sample is stored in a NumPy ``.npz`` file with the following keys:
 * ``direction`` – float scalar: ground-truth direction offset (degrees).
 * ``power``     – float scalar: ground-truth power in [0, 1].
 * ``loft``      – float scalar: ground-truth loft angle (degrees).
+* ``score``     – *optional* float scalar in ``[1, 10]``: user-assigned shot
+  quality rating produced by the interactive trainer.  Used as a per-sample
+  loss weight (``weight = score / 10``).  Samples without this key are
+  treated as having a neutral weight of ``0.5``.
 """
 
 from pathlib import Path
@@ -30,10 +34,19 @@ from torch.utils.data import Dataset, DataLoader, random_split
 
 from sbg.model import ShotPredictorModel, DEFAULT_IMG_H, DEFAULT_IMG_W
 
+# Neutral per-sample score used for legacy .npz files that pre-date the
+# interactive trainer and therefore lack a 'score' key.
+_DEFAULT_SAMPLE_SCORE: float = 5.0
+
 
 class ShotDataset(Dataset):
     """
     Dataset that loads shot samples from a directory of ``.npz`` files.
+
+    Each file may optionally contain a ``score`` key (float, 1–10) written by
+    the interactive trainer.  The score is normalised to ``[0, 1]`` and returned
+    as ``weight`` in each sample dict.  Files without a ``score`` key default to
+    a neutral weight of ``0.5``.
 
     Parameters:
         data_dir: Path to the directory containing ``.npz`` sample files.
@@ -85,7 +98,11 @@ class ShotDataset(Dataset):
             dtype=torch.float32,
         )
 
-        return {"image": image_tensor, "features": features, "labels": labels}
+        # Score is optional; default to neutral weight for legacy files.
+        raw_score = float(data["score"]) if "score" in data else _DEFAULT_SAMPLE_SCORE
+        weight = torch.tensor(raw_score / 10.0, dtype=torch.float32)
+
+        return {"image": image_tensor, "features": features, "labels": labels, "weight": weight}
 
 
 def _shot_loss(
@@ -93,18 +110,41 @@ def _shot_loss(
     pred_power: torch.Tensor,
     pred_loft: torch.Tensor,
     labels: torch.Tensor,
+    weights: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    """Weighted MSE loss combining direction, power, and loft targets."""
+    """
+    Weighted MSE loss combining direction, power, and loft targets.
+
+    Parameters
+    ----------
+    pred_direction, pred_power, pred_loft:
+        Model output tensors, each of shape ``(B,)``.
+    labels:
+        Ground-truth tensor of shape ``(B, 3)`` with columns
+        ``[direction, power, loft]``.
+    weights:
+        Optional per-sample weight tensor of shape ``(B,)``.  Values are
+        expected in ``[0, 1]``; a higher weight means the sample contributes
+        more to the loss.  When ``None`` all samples are weighted equally.
+    """
     target_dir = labels[:, 0]
     target_power = labels[:, 1]
     target_loft = labels[:, 2]
 
-    loss_dir = nn.functional.mse_loss(pred_direction, target_dir)
-    loss_power = nn.functional.mse_loss(pred_power, target_power)
-    loss_loft = nn.functional.mse_loss(pred_loft / 90.0, target_loft / 90.0)
+    # Per-sample losses (reduction='none' so we can apply weights)
+    loss_dir = nn.functional.mse_loss(pred_direction, target_dir, reduction="none")
+    loss_power = nn.functional.mse_loss(pred_power, target_power, reduction="none")
+    loss_loft = nn.functional.mse_loss(
+        pred_loft / 90.0, target_loft / 90.0, reduction="none"
+    )
 
     # Weight direction most heavily as it has the greatest impact on accuracy
-    return 2.0 * loss_dir + loss_power + loss_loft
+    combined = 2.0 * loss_dir + loss_power + loss_loft
+
+    if weights is not None:
+        combined = combined * weights
+
+    return combined.mean()
 
 
 def train_one_epoch(
@@ -120,10 +160,11 @@ def train_one_epoch(
         images = batch["image"].to(device)
         features = batch["features"].to(device)
         labels = batch["labels"].to(device)
+        weights = batch["weight"].to(device)
 
         optimizer.zero_grad()
         direction, power, loft = model(images, features)
-        loss = _shot_loss(direction, power, loft, labels)
+        loss = _shot_loss(direction, power, loft, labels, weights=weights)
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
