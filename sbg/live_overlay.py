@@ -116,6 +116,8 @@ _POWER_BAR_H = 10
 _MAX_WIND_SPEED = 20.0       # Matches ScreenAnalyzer wind scaling (0–20 units)
 _NEGLIGIBLE_WIND_THRESHOLD = 0.1  # Below this, wind is treated as negligible
 _OBSTACLE_THRESHOLD = 0.5    # Normalised obstacle map cutoff (0–1)
+_MIN_WIND_ARROW_LEN = 8
+_MAX_WIND_ARROW_LEN = 40
 
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
@@ -430,8 +432,8 @@ def _clamp_value(value: float, min_value: float, max_value: float) -> float:
 
 def _clamp_point(img: np.ndarray, x: float, y: float) -> tuple[int, int]:
     h, w = img.shape[:2]
-    cx = int(_clamp_value(round(x), 0, w - 1))
-    cy = int(_clamp_value(round(y), 0, h - 1))
+    cx = int(_clamp_value(x, 0, w - 1))
+    cy = int(_clamp_value(y, 0, h - 1))
     return cx, cy
 
 
@@ -498,7 +500,10 @@ def _draw_wind_vector(
     if wind_speed <= _NEGLIGIBLE_WIND_THRESHOLD:
         cv2.circle(img, origin, 3, _COLOUR_WIND, -1, cv2.LINE_AA)
         return
-    length = max(8, int(40 * min(wind_speed / _MAX_WIND_SPEED, 1.0)))
+    length = max(
+        _MIN_WIND_ARROW_LEN,
+        int(_MAX_WIND_ARROW_LEN * min(wind_speed / _MAX_WIND_SPEED, 1.0)),
+    )
     angle = math.radians(wind_direction_deg)
     dx = math.cos(angle) * length
     dy = -math.sin(angle) * length
