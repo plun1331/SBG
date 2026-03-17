@@ -113,7 +113,7 @@ _MARKER_RADIUS = 6
 _PATH_RADIUS = 3
 _POWER_BAR_W = 130
 _POWER_BAR_H = 10
-_MAX_WIND_SPEED = 20.0       # Matches ScreenAnalyzer length/roi_w * 20 scaling
+_MAX_WIND_SPEED = 20.0       # Matches ScreenAnalyzer._detect_wind scaling (length/roi_w * 20)
 _NEGLIGIBLE_WIND_THRESHOLD = 0.1  # Below this, wind is treated as negligible
 _OBSTACLE_THRESHOLD = 0.5    # Normalised obstacle map cutoff (0–1)
 _MIN_WIND_ARROW_LEN = 8
@@ -437,10 +437,10 @@ def _clamp_point(img: np.ndarray, x: float, y: float) -> tuple[int, int]:
     return cx, cy
 
 
-def _align_samples(primary: list, secondary: list) -> list:
-    """Pad or trim *secondary* to match the length of *primary*."""
-    target_len = len(primary)
-    aligned = list(secondary or [])
+def _align_samples(reference_samples: list, samples_to_align: list) -> list:
+    """Pad or trim *samples_to_align* to match *reference_samples* length."""
+    target_len = len(reference_samples)
+    aligned = list(samples_to_align or [])
     if len(aligned) < target_len:
         aligned.extend([0.0] * (target_len - len(aligned)))
     return aligned[:target_len]
@@ -508,7 +508,7 @@ def _draw_wind_vector(
     )
     angle = math.radians(wind_direction_deg)
     dx = math.cos(angle) * length
-    dy = -math.sin(angle) * length  # screen y grows downward (0° right, 90° up)
+    dy = -math.sin(angle) * length  # screen y increases downward (0° right, 90° up)
     end = (int(origin[0] + dx), int(origin[1] + dy))
     cv2.arrowedLine(img, origin, end, _COLOUR_WIND, 2, cv2.LINE_AA, tipLength=0.3)
 
