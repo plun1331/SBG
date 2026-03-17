@@ -139,7 +139,7 @@ _WIN32_SWP_SHOWWINDOW = 0x0040
 _WIN32_SWP_NOACTIVATE = 0x0010
 _WIN32_SWP_NOMOVE = 0x0002
 _WIN32_SWP_NOSIZE = 0x0001
-_WIN32_WDA_EXCLUDEFROMCAPTURE = 0x11
+_WIN32_WDA_EXCLUDEFROMCAPTURE = 0x11  # WDA_EXCLUDEFROMCAPTURE
 
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
@@ -337,11 +337,11 @@ class LiveOverlay:
                                 time.perf_counter() + _OVERLAY_REFRESH_INTERVAL
                             )
                             if _is_windows():
-                                capture_excluded, warning = _capture_exclusion_status(
+                                capture_excluded, warning_message = _capture_exclusion_status(
                                     overlay_hwnd
                                 )
-                                if warning and not capture_exclusion_warned:
-                                    warnings.warn(warning, RuntimeWarning)
+                                if warning_message and not capture_exclusion_warned:
+                                    warnings.warn(warning_message, RuntimeWarning)
                                     capture_exclusion_warned = True
                     if transparent_mode and overlay_hwnd:
                         current_time = time.perf_counter()
@@ -508,7 +508,7 @@ def _windows_build() -> int:
         return 0
     try:
         return sys.getwindowsversion().build
-    except AttributeError:  # pragma: no cover - unavailable on non-Windows
+    except AttributeError:  # pragma: no cover - unavailable on some Windows builds
         return 0
 
 
