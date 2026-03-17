@@ -109,6 +109,7 @@ _FLAG_FILL_RATIO_MIN: float = 0.25
 _FLAG_TEMPLATE_SCORE_MIN: float = 0.7
 
 _FLAG_TEMPLATE_EDGES: Optional[np.ndarray] = None
+_FLAG_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "images" / "hit_bar_closeup.png"
 
 # ---------------------------------------------------------------------------
 # Terrain-zone thresholds (derived from hit-bar close-up analysis)
@@ -157,11 +158,10 @@ def _load_flag_template_edges() -> Optional[np.ndarray]:
     if _FLAG_TEMPLATE_EDGES is not None:
         return _FLAG_TEMPLATE_EDGES
 
-    template_path = Path(__file__).resolve().parent.parent / "images" / "hit_bar_closeup.png"
-    if not template_path.exists():
+    if not _FLAG_TEMPLATE_PATH.exists():
         return None
 
-    img = cv2.imread(str(template_path))
+    img = cv2.imread(str(_FLAG_TEMPLATE_PATH))
     if img is None:
         return None
 
