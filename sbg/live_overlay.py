@@ -20,7 +20,7 @@ Usage (API)::
     overlay.run()                          # display + save to out.mp4
 
     overlay = LiveOverlay(transparent=True)
-    overlay.run()                          # transparent overlay (Windows 11)
+    overlay.run()                          # transparent overlay (Windows)
 
     overlay = LiveOverlay(overlay_only=True)
     overlay.run()                          # overlay-only window (no game frame)
@@ -227,10 +227,11 @@ class LiveOverlay:
             overlay_base = None
             if overlay_only:
                 bg_color = _TRANSPARENT_KEY if transparent_mode else _OVERLAY_ONLY_BG
-                overlay_base = np.empty(
-                    (monitor["height"], monitor["width"], 3), dtype=np.uint8
+                overlay_base = np.full(
+                    (monitor["height"], monitor["width"], 3),
+                    bg_color,
+                    dtype=np.uint8,
                 )
-                overlay_base[:] = bg_color
 
             try:
                 while True:
@@ -285,7 +286,7 @@ class LiveOverlay:
                     )
                     annotated = (
                         self._draw_overlay(overlay_base, state, fps_display, recording)
-                        if overlay_only and overlay_base is not None
+                        if overlay_only
                         else annotated_full
                     )
 
@@ -477,7 +478,7 @@ def _is_windows() -> bool:
 
 def _colorref_from_bgr(bgr: tuple[int, int, int]) -> int:
     b, g, r = bgr
-    return int(r | (g << 8) | (b << 16))
+    return r | (g << 8) | (b << 16)
 
 
 def _configure_windows_overlay(
