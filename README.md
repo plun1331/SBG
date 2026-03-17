@@ -4,7 +4,7 @@ An ML model that analyzes screenshots from the game **Super Battle Golf** to aut
 
 ## Overview
 
-SBG uses computer vision to parse the game screen (detecting the hit bar, ball position, hole position, wind, terrain, and obstacles) and feeds that information into a dual-branch neural network that outputs a recommended shot.
+SBG uses computer vision to parse the game screen (detecting the hit bar only) and feeds that information into a dual-branch neural network that outputs a recommended shot.
 
 | Input | Output |
 |---|---|
@@ -33,10 +33,10 @@ Game Screen Image
        ▼
 ┌─────────────────────────┐
 │       GameState         │  ← Structured game-state dataclass
-│  to_feature_vector()    │  → 53-dimensional normalized vector
+│  to_feature_vector()    │  → 11-dimensional hit-bar vector
 └─────────────────────────┘
        │              │
-  53-dim features   image tensor
+ 11-dim features   image tensor
        │              │
        ▼              ▼
 ┌─────────────────────────────────┐
@@ -58,6 +58,7 @@ SBG/
 ├── sbg/
 │   ├── __init__.py          # Package exports
 │   ├── game_state.py        # GameState, HitBarState, ShotParameters dataclasses
+│   ├── live_overlay.py      # Live screen overlay + recording
 │   ├── model.py             # ShotPredictorModel (PyTorch)
 │   ├── screen_analyzer.py   # OpenCV-based screen parsing
 │   ├── shot_predictor.py    # End-to-end predictor (ScreenAnalyzer + model)
@@ -111,10 +112,44 @@ analyzer = ScreenAnalyzer()
 frame = cv2.imread("screenshot.png")
 state = analyzer.analyze(frame)
 
-print(f"Ball position:  {state.ball_position}")
-print(f"Hole position:  {state.hole_position}")
-print(f"Wind:           {state.wind_speed} km/h @ {state.wind_direction_deg}°")
 print(f"Hit bar visible: {state.hit_bar.is_visible}")
+print(f"Flag direction:  {state.hit_bar.flag_direction_offset:+.2f}")
+print(f"Flag y%:         {state.hit_bar.flag_y_pct:.2f}")
+```
+
+### Live overlay + recording
+
+Record gameplay from your screen and overlay the hit-bar analysis in real time:
+
+```bash
+python -m sbg.live_overlay
+```
+
+To save the annotated output to a video file:
+
+```bash
+python -m sbg.live_overlay --output out.mp4
+```
+
+Keyboard shortcuts inside the overlay window:
+
+- **Q / Esc** — quit
+- **R** — toggle recording (auto-named file when `--output` is omitted)
+- **Space** — pause / resume
+
+Use `--monitor` to pick which display to capture if needed.
+
+On Windows 11, you can enable a transparent click-through fullscreen overlay
+that is excluded from screen capture (prevents overlay feedback/lag):
+
+```bash
+python -m sbg.live_overlay --transparent
+```
+
+To show only the UI elements (no game frame), use:
+
+```bash
+python -m sbg.live_overlay --overlay-only
 ```
 
 ### Train the model
@@ -124,7 +159,7 @@ Training data is stored as `.npz` files (one per sample) in a directory. Each fi
 | Key | Shape | Description |
 |---|---|---|
 | `image` | `(H, W, 3)` uint8 | Raw BGR game screenshot |
-| `features` | `(53,)` float32 | `GameState.to_feature_vector()` |
+| `features` | `(11,)` float32 | `GameState.to_feature_vector()` |
 | `direction` | scalar float | Ground-truth aim offset (degrees) |
 | `power` | scalar float | Ground-truth power in [0, 1] |
 | `loft` | scalar float | Ground-truth loft angle (degrees) |
@@ -149,13 +184,10 @@ The hit bar is the vertical UI element on the left side of the screen that encod
 - **Flag position** – horizontal offset maps to aim direction; vertical position encodes distance to hole.
 - **Terrain zones** – colour-coded rows indicate FAIRWAY, ROUGH_OOB, or WATER_OOB along the ball's flight path.
 
-### Feature Vector (53 dimensions)
+### Feature Vector (11 dimensions)
 
 | Segment | Dims | Description |
 |---|---|---|
-| Base state | 10 | Ball/hole positions, distance, wind, power gauge |
-| Terrain elevation | 16 | Sampled along ball→hole line |
-| Obstacle map | 16 | Sampled along ball→hole line |
 | Hit-bar state | 11 | Visibility, flag position (x, y), terrain zone encoding |
 
 ### Model Outputs
