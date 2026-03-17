@@ -338,35 +338,37 @@ class LiveOverlay:
                                 time.perf_counter() + _OVERLAY_REFRESH_INTERVAL
                             )
                             capture_hwnd = overlay_hwnd
+                            if _is_windows():
+                                if not _is_windows_11():
+                                    if not capture_exclusion_warned:
+                                        warnings.warn(
+                                            "Capture exclusion requires Windows 11 (build 22000+); the overlay may appear in captures.",
+                                            RuntimeWarning,
+                                        )
+                                        capture_exclusion_warned = True
+                                else:
+                                    exclusion_result = _set_window_capture_exclusion(
+                                        capture_hwnd
+                                    )
+                                    if exclusion_result:
+                                        capture_excluded = True
+                                    elif not capture_exclusion_warned:
+                                        if exclusion_result is None:
+                                            warnings.warn(
+                                                "Display-affinity capture exclusion is unavailable on this Windows build.",
+                                                RuntimeWarning,
+                                            )
+                                        else:
+                                            warnings.warn(
+                                                "Unable to exclude the overlay window from capture.",
+                                                RuntimeWarning,
+                                            )
+                                        capture_exclusion_warned = True
                     if transparent_mode and overlay_hwnd:
                         current_time = time.perf_counter()
                         if current_time >= overlay_refresh_at:
                             _refresh_windows_overlay(overlay_hwnd, monitor)
                             overlay_refresh_at = current_time + _OVERLAY_REFRESH_INTERVAL
-                    if transparent_mode and _is_windows():
-                        if not _is_windows_11():
-                            if not capture_exclusion_warned:
-                                warnings.warn(
-                                    "Capture exclusion requires Windows 11 (build 22000+); the overlay may appear in captures.",
-                                    RuntimeWarning,
-                                )
-                                capture_exclusion_warned = True
-                        elif not capture_excluded and capture_hwnd:
-                            exclusion_result = _set_window_capture_exclusion(capture_hwnd)
-                            if exclusion_result:
-                                capture_excluded = True
-                            elif not capture_exclusion_warned:
-                                if exclusion_result is None:
-                                    warnings.warn(
-                                        "Display-affinity capture exclusion is unavailable on this Windows build.",
-                                        RuntimeWarning,
-                                    )
-                                else:
-                                    warnings.warn(
-                                        "Unable to exclude the overlay window from capture.",
-                                        RuntimeWarning,
-                                    )
-                                capture_exclusion_warned = True
 
             finally:
                 if writer is not None:
