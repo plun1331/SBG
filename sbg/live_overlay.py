@@ -238,7 +238,8 @@ class LiveOverlay:
                 )
             overlay_configured = False
             overlay_hwnd = None
-            overlay_refresh_last = time.perf_counter()
+            overlay_refresh_every = max(1, int(self._fps * _OVERLAY_REFRESH_INTERVAL))
+            overlay_refresh_count = 0
             overlay_base = None
             if overlay_only:
                 bg_color = _TRANSPARENT_KEY if transparent_mode else _OVERLAY_ONLY_BG
@@ -324,10 +325,10 @@ class LiveOverlay:
                         )
                         overlay_configured = overlay_hwnd is not None
                     if transparent_mode and overlay_hwnd:
-                        refresh_now = time.perf_counter()
-                        if refresh_now - overlay_refresh_last >= _OVERLAY_REFRESH_INTERVAL:
+                        overlay_refresh_count += 1
+                        if overlay_refresh_count >= overlay_refresh_every:
                             _refresh_windows_overlay(overlay_hwnd, monitor)
-                            overlay_refresh_last = refresh_now
+                            overlay_refresh_count = 0
 
             finally:
                 if writer is not None:
