@@ -149,6 +149,7 @@ _TARGET_FPS: int = 30
 # Default output video codec and extension
 _FOURCC = "mp4v"
 _OUTPUT_EXT = ".mp4"
+_OVERLAY_REFRESH_INTERVAL = 0.1  # seconds between topmost refreshes
 
 
 class LiveOverlay:
@@ -243,6 +244,7 @@ class LiveOverlay:
             overlay_hwnd = None
             # self._fps is clamped to >= 1 in __init__
             overlay_base = None
+            overlay_refresh_at = 0.0
             if overlay_only:
                 bg_color = _TRANSPARENT_KEY if transparent_mode else _OVERLAY_ONLY_BG
                 overlay_base = np.full(
@@ -327,7 +329,10 @@ class LiveOverlay:
                         )
                         overlay_configured = overlay_hwnd is not None
                     if transparent_mode and overlay_hwnd:
-                        _refresh_windows_overlay(overlay_hwnd, monitor)
+                        refresh_now = time.perf_counter()
+                        if refresh_now >= overlay_refresh_at:
+                            _refresh_windows_overlay(overlay_hwnd, monitor)
+                            overlay_refresh_at = refresh_now + _OVERLAY_REFRESH_INTERVAL
 
             finally:
                 if writer is not None:
