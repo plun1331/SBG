@@ -149,6 +149,7 @@ _TARGET_FPS: int = 30
 _FOURCC = "mp4v"
 _OUTPUT_EXT = ".mp4"
 _OVERLAY_REFRESH_INTERVAL = 0.5  # seconds between topmost refreshes
+_OVERLAY_REFRESH_MIN_FRAMES = 1  # minimum refresh cadence in frames
 
 
 class LiveOverlay:
@@ -238,7 +239,10 @@ class LiveOverlay:
                 )
             overlay_configured = False
             overlay_hwnd = None
-            overlay_refresh_every = max(1, int(self._fps * _OVERLAY_REFRESH_INTERVAL))
+            overlay_refresh_every = max(
+                _OVERLAY_REFRESH_MIN_FRAMES,
+                int(self._fps * _OVERLAY_REFRESH_INTERVAL),
+            )
             overlay_refresh_count = 0
             overlay_base = None
             if overlay_only:
@@ -526,7 +530,7 @@ def _configure_windows_overlay(
         255,
         _WIN32_LWA_COLORKEY,
     )
-    left, top, width, height = _monitor_rect(monitor)
+    left, top, width, height = _monitor_bounds(monitor)
     ctypes.windll.user32.SetWindowPos(
         hwnd,
         _WIN32_HWND_TOPMOST,
@@ -543,7 +547,7 @@ def _refresh_windows_overlay(hwnd: int, monitor: dict) -> None:
     """Re-assert topmost positioning for the transparent overlay on Windows."""
     if not _is_windows() or not hwnd:
         return
-    left, top, width, height = _monitor_rect(monitor)
+    left, top, width, height = _monitor_bounds(monitor)
     ctypes.windll.user32.SetWindowPos(
         hwnd,
         _WIN32_HWND_TOPMOST,
@@ -558,7 +562,7 @@ def _refresh_windows_overlay(hwnd: int, monitor: dict) -> None:
     )
 
 
-def _monitor_rect(monitor: dict) -> tuple[int, int, int, int]:
+def _monitor_bounds(monitor: dict) -> tuple[int, int, int, int]:
     """Return monitor bounds as integer (left, top, width, height).
 
     Parameters:
