@@ -45,6 +45,7 @@ variance:
 """
 
 import math
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 import cv2
@@ -100,6 +101,14 @@ _FLAG_UPPER2 = np.array([180, 255, 255], dtype=np.uint8)
 
 # Minimum pixel area for a candidate flag contour
 _FLAG_MIN_AREA: int = 8
+_FLAG_AREA_REL_MIN: float = 0.0004
+_FLAG_AREA_REL_MAX: float = 0.05
+_FLAG_ASPECT_MIN: float = 0.5
+_FLAG_ASPECT_MAX: float = 2.2
+_FLAG_FILL_RATIO_MIN: float = 0.25
+_FLAG_TEMPLATE_SCORE_MIN: float = 0.7
+
+_FLAG_TEMPLATE_EDGES: Optional[np.ndarray] = None
 
 # ---------------------------------------------------------------------------
 # Terrain-zone thresholds (derived from hit-bar close-up analysis)
@@ -112,6 +121,11 @@ _WATER_HUE_MIN: int = 72
 # Standard deviation of BGR values across a bar row above which the row is
 # considered "striped" (out-of-bounds).
 _STRIPE_STD_THRESHOLD: float = 42.0
+_EDGE_MAG_THRESHOLD: float = 25.0
+_EDGE_DENSITY_MIN: float = 0.05
+_DIAGONAL_ANGLE_MIN: float = 25.0
+_DIAGONAL_ANGLE_MAX: float = 65.0
+_DIAGONAL_EDGE_RATIO_MIN: float = 0.45
 
 # Hue lower/upper bounds for green-family zones (FAIRWAY and ROUGH_OOB)
 _GREEN_HUE_MIN: int = 40
@@ -133,6 +147,39 @@ _OBSTACLE_UPPER = np.array([140, 255, 200], dtype=np.uint8)
 _MIN_BALL_AREA: int = 20
 _MIN_HOLE_AREA: int = 30
 _TERRAIN_SAMPLES: int = 16
+
+_BAR_CROP_ASPECT_MAX: float = 0.35
+_BAR_CROP_MIN_HEIGHT_RATIO: float = 2.0
+
+
+def _load_flag_template_edges() -> Optional[np.ndarray]:
+    global _FLAG_TEMPLATE_EDGES
+    if _FLAG_TEMPLATE_EDGES is not None:
+        return _FLAG_TEMPLATE_EDGES
+
+    template_path = Path(__file__).resolve().parent.parent / "images" / "hit_bar_closeup.png"
+    if not template_path.exists():
+        return None
+
+    img = cv2.imread(str(template_path))
+    if img is None:
+        return None
+
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    mask = cv2.bitwise_or(
+        cv2.inRange(hsv, _FLAG_LOWER1, _FLAG_UPPER1),
+        cv2.inRange(hsv, _FLAG_LOWER2, _FLAG_UPPER2),
+    )
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        c = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(c)
+        img = img[y:y + h, x:x + w]
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 50, 150)
+    _FLAG_TEMPLATE_EDGES = edges
+    return edges
 
 
 class ScreenAnalyzer:
@@ -232,29 +279,34 @@ class ScreenAnalyzer:
         Returns:
             HitBarState (``is_visible=False`` when the bar is not present).
         """
-        x0 = int(_BAR_X_REL * w)
-        y0 = int(_BAR_Y_REL * h)
-        bw = max(1, int(_BAR_W_REL * w))
-        bh = max(1, int(_BAR_H_REL * h))
+        is_bar_crop = self._is_bar_crop(w, h)
+        if is_bar_crop:
+            bar_crop = frame
+        else:
+            x0 = int(_BAR_X_REL * w)
+            y0 = int(_BAR_Y_REL * h)
+            bw = max(1, int(_BAR_W_REL * w))
+            bh = max(1, int(_BAR_H_REL * h))
 
-        x1 = min(x0 + bw, w)
-        y1 = min(y0 + bh, h)
-        bar_crop = frame[y0:y1, x0:x1]
+            x1 = min(x0 + bw, w)
+            y1 = min(y0 + bh, h)
+            bar_crop = frame[y0:y1, x0:x1]
 
         if bar_crop.size == 0:
             return HitBarState(is_visible=False)
 
-        if not self._is_bar_visible(bar_crop):
+        if not is_bar_crop and not self._is_bar_visible(bar_crop):
             return HitBarState(is_visible=False)
 
         bar_hsv = cv2.cvtColor(bar_crop, cv2.COLOR_BGR2HSV)
-        flag_dir, flag_y = self._detect_flag(bar_crop, bar_hsv)
+        flag_dir, flag_y, flag_detected = self._detect_flag(bar_crop, bar_hsv)
         zones = self._classify_terrain_zones(bar_crop)
 
         return HitBarState(
             is_visible=True,
             flag_direction_offset=flag_dir,
             flag_y_pct=flag_y,
+            flag_detected=flag_detected,
             terrain_zones=zones,
         )
 
@@ -305,11 +357,18 @@ class ScreenAnalyzer:
         right_dip = interior - float(right_win.min())
         return left_dip >= _BAR_BORDER_DIP_MIN and right_dip >= _BAR_BORDER_DIP_MIN
 
+    @staticmethod
+    def _is_bar_crop(w: int, h: int) -> bool:
+        if h <= 0 or w <= 0:
+            return False
+        aspect = w / h
+        return aspect <= _BAR_CROP_ASPECT_MAX and h >= w * _BAR_CROP_MIN_HEIGHT_RATIO
+
     def _detect_flag(
         self,
         bar_bgr: np.ndarray,
         bar_hsv: np.ndarray,
-    ) -> Tuple[float, float]:
+    ) -> Tuple[float, float, bool]:
         """
         Locate the red flag icon inside the bar crop and return its normalised
         position.
@@ -327,8 +386,8 @@ class ScreenAnalyzer:
             bar_hsv: HSV crop of the bar (same shape).
 
         Returns:
-            Tuple ``(direction_offset, y_pct)``.  Falls back to ``(0.0, 0.5)``
-            if the flag cannot be detected.
+            Tuple ``(direction_offset, y_pct, detected)``.  Falls back to
+            ``(0.0, 0.5, False)`` if the flag cannot be detected.
         """
         bh, bw = bar_bgr.shape[:2]
 
@@ -344,27 +403,62 @@ class ScreenAnalyzer:
         contours, _ = cv2.findContours(
             flag_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
-        if not contours:
-            return 0.0, 0.5
+        candidates: List[Tuple[float, np.ndarray]] = []
+        if contours:
+            bar_area = float(bw * bh)
+            min_area = max(_FLAG_MIN_AREA, bar_area * _FLAG_AREA_REL_MIN)
+            max_area = bar_area * _FLAG_AREA_REL_MAX
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                if area < min_area or area > max_area:
+                    continue
+                x, y, w, h = cv2.boundingRect(contour)
+                if w == 0 or h == 0:
+                    continue
+                aspect = w / h
+                if aspect < _FLAG_ASPECT_MIN or aspect > _FLAG_ASPECT_MAX:
+                    continue
+                fill_ratio = area / (w * h)
+                if fill_ratio < _FLAG_FILL_RATIO_MIN:
+                    continue
+                score = area * fill_ratio
+                candidates.append((score, contour))
 
-        # Use the largest qualifying contour
-        valid = [c for c in contours if cv2.contourArea(c) >= _FLAG_MIN_AREA]
-        if not valid:
-            return 0.0, 0.5
+        if candidates:
+            _, best = max(candidates, key=lambda item: item[0])
+            m = cv2.moments(best)
+            if m["m00"] > 0:
+                cx = m["m10"] / m["m00"]
+                cy = m["m01"] / m["m00"]
 
-        largest = max(valid, key=cv2.contourArea)
-        m = cv2.moments(largest)
-        if m["m00"] == 0:
-            return 0.0, 0.5
+                direction_offset = (cx / bw - 0.5) * 2.0
+                y_pct = cy / bh
 
-        cx = m["m10"] / m["m00"]
-        cy = m["m01"] / m["m00"]
+                return (
+                    float(np.clip(direction_offset, -1.0, 1.0)),
+                    float(np.clip(y_pct, 0.0, 1.0)),
+                    True,
+                )
 
-        # direction_offset: centre = 0, left = -1, right = +1
-        direction_offset = (cx / bw - 0.5) * 2.0
-        y_pct = cy / bh
+        template_edges = _load_flag_template_edges()
+        if template_edges is not None:
+            t_h, t_w = template_edges.shape[:2]
+            if bh >= t_h and bw >= t_w:
+                edges = cv2.Canny(cv2.cvtColor(bar_bgr, cv2.COLOR_BGR2GRAY), 50, 150)
+                res = cv2.matchTemplate(edges, template_edges, cv2.TM_CCOEFF_NORMED)
+                _, max_val, _, max_loc = cv2.minMaxLoc(res)
+                if max_val >= _FLAG_TEMPLATE_SCORE_MIN:
+                    cx = max_loc[0] + t_w / 2.0
+                    cy = max_loc[1] + t_h / 2.0
+                    direction_offset = (cx / bw - 0.5) * 2.0
+                    y_pct = cy / bh
+                    return (
+                        float(np.clip(direction_offset, -1.0, 1.0)),
+                        float(np.clip(y_pct, 0.0, 1.0)),
+                        True,
+                    )
 
-        return float(np.clip(direction_offset, -1.0, 1.0)), float(np.clip(y_pct, 0.0, 1.0))
+        return 0.0, 0.5, False
 
     def _classify_terrain_zones(
         self, bar_bgr: np.ndarray
@@ -399,6 +493,11 @@ class ScreenAnalyzer:
 
         bar_hsv = cv2.cvtColor(bar_bgr, cv2.COLOR_BGR2HSV)
         interior_hsv = bar_hsv[:, int_col_start:int_col_end]
+        interior_gray = cv2.cvtColor(interior_bgr, cv2.COLOR_BGR2GRAY)
+        grad_x = cv2.Sobel(interior_gray, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(interior_gray, cv2.CV_32F, 0, 1, ksize=3)
+        grad_mag = cv2.magnitude(grad_x, grad_y)
+        grad_angle = cv2.phase(grad_x, grad_y, angleInDegrees=True) % 180.0
 
         # Per-row classification
         row_zones: List[TerrainZoneType] = []
@@ -408,7 +507,27 @@ class ScreenAnalyzer:
             mean_h = float(row_h.mean())
             bgr_std = float(row_bgr.std())
 
-            zone = self._classify_row(mean_h, bgr_std)
+            row_mag = grad_mag[y]
+            row_angle = grad_angle[y]
+            edge_mask = row_mag >= _EDGE_MAG_THRESHOLD
+            edge_density = float(edge_mask.mean()) if row_mag.size else 0.0
+            if edge_density >= _EDGE_DENSITY_MIN and edge_mask.any():
+                diag_mask = (
+                    ((row_angle >= _DIAGONAL_ANGLE_MIN) & (row_angle <= _DIAGONAL_ANGLE_MAX))
+                    | ((row_angle >= (180.0 - _DIAGONAL_ANGLE_MAX))
+                       & (row_angle <= (180.0 - _DIAGONAL_ANGLE_MIN)))
+                )
+                diag_ratio = float(diag_mask[edge_mask].mean())
+            else:
+                diag_ratio = 0.0
+
+            is_striped = (
+                bgr_std >= _STRIPE_STD_THRESHOLD
+                and edge_density >= _EDGE_DENSITY_MIN
+                and diag_ratio >= _DIAGONAL_EDGE_RATIO_MIN
+            )
+
+            zone = self._classify_row(mean_h, is_striped)
             row_zones.append(zone)
 
         # Merge consecutive equal zones
@@ -427,26 +546,26 @@ class ScreenAnalyzer:
         return zones
 
     @staticmethod
-    def _classify_row(mean_h: float, bgr_std: float) -> TerrainZoneType:
+    def _classify_row(mean_h: float, is_striped: bool) -> TerrainZoneType:
         """
-        Classify a single bar row from its mean HSV hue and BGR std-dev.
+        Classify a single bar row from its mean HSV hue and stripe indicator.
 
         Parameters:
             mean_h: Mean OpenCV hue value of the row (0–180).
-            bgr_std: Standard deviation of BGR values across the row.
+            is_striped: True if diagonal stripe edges were detected in the row.
 
         Returns:
             TerrainZoneType
         """
-        # Water / hazard: notably more blue-green hue AND highly striped
-        if mean_h >= _WATER_HUE_MIN and bgr_std >= _STRIPE_STD_THRESHOLD:
+        if not is_striped:
+            return TerrainZoneType.FAIRWAY
+
+        # Water / hazard: notably more blue-green hue AND striped
+        if mean_h >= _WATER_HUE_MIN:
             return TerrainZoneType.WATER_OOB
 
         # Rough OOB: green hue but strongly striped
-        if (
-            _GREEN_HUE_MIN <= mean_h <= _GREEN_HUE_MAX
-            and bgr_std >= _STRIPE_STD_THRESHOLD
-        ):
+        if _GREEN_HUE_MIN <= mean_h <= _GREEN_HUE_MAX:
             return TerrainZoneType.ROUGH_OOB
 
         # Everything else: fairway / green

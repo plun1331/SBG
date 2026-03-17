@@ -55,6 +55,8 @@ class HitBarState:
             fraction of bar height in ``[0, 1]``.  ``0`` is the top of the
             bar, ``1`` is the bottom.  This encodes distance to the hole
             relative to the maximum shot range shown by the bar.
+        flag_detected: Whether the flag icon was confidently detected in the
+            current bar crop.
         terrain_zones: List of ``(start_pct, end_pct, TerrainZoneType)``
             tuples describing the terrain zones from top to bottom of the
             bar (each ``*_pct`` value is in ``[0, 1]``).
@@ -63,6 +65,7 @@ class HitBarState:
     is_visible: bool = False
     flag_direction_offset: float = 0.0
     flag_y_pct: float = 0.5
+    flag_detected: bool = False
     terrain_zones: List[Tuple[float, float, "TerrainZoneType"]] = field(
         default_factory=list
     )

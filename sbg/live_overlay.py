@@ -282,20 +282,21 @@ class LiveOverlay:
                     overlay[zy0:zy1, bx0:bx1] = colour
                 cv2.addWeighted(overlay, _ZONE_ALPHA, out, 1 - _ZONE_ALPHA, 0, out)
 
-                # Flag marker (cross-hair)
-                flag_cx = bx0 + int((bar.flag_direction_offset * 0.5 + 0.5) * bw)
-                flag_cy = by0 + int(bar.flag_y_pct * bh)
-                _draw_crosshair(out, flag_cx, flag_cy, _FLAG_ARM, (0, 230, 230))
-
                 # Bar rectangle (green = detected)
                 cv2.rectangle(out, (bx0, by0), (bx1, by1), _COLOUR_BAR_VISIBLE, 2)
 
                 # Status text
-                lines = [
-                    f"BAR VISIBLE",
-                    f"dir  {bar.flag_direction_offset:+.2f}",
-                    f"y    {bar.flag_y_pct:.2f}",
-                ]
+                lines = ["BAR VISIBLE"]
+                if bar.flag_detected:
+                    flag_cx = bx0 + int((bar.flag_direction_offset * 0.5 + 0.5) * bw)
+                    flag_cy = by0 + int(bar.flag_y_pct * bh)
+                    _draw_crosshair(out, flag_cx, flag_cy, _FLAG_ARM, (0, 230, 230))
+                    lines.extend([
+                        f"dir  {bar.flag_direction_offset:+.2f}",
+                        f"y    {bar.flag_y_pct:.2f}",
+                    ])
+                else:
+                    lines.append("FLAG NOT DETECTED")
                 text_colour = _COLOUR_BAR_VISIBLE
             else:
                 # Bar rectangle (red = not detected)

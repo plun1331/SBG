@@ -37,6 +37,7 @@ from sbg.screen_analyzer import (
 
 # Path to example screenshots (if present in the repository)
 _IMAGES_DIR = Path(__file__).parent.parent / "images"
+_UPLOADS_DIR = Path(__file__).parent.parent
 
 # Reference screen size used when generating synthetic test frames
 _REF_W = 2559
@@ -80,6 +81,14 @@ def _draw_bar_dark_outline(
     frame[y0:y0 + bh, x0 + max(0, rc - hw) : x0 + rc + hw + 1] = dark_bgr
 
 
+def _draw_white_dots(frame: np.ndarray, x0: int, y0: int, bw: int, bh: int) -> None:
+    dot_colour = (240, 240, 240)
+    cx = x0 + bw // 2
+    for pct in (0.25, 0.5, 0.75):
+        cy = y0 + int(pct * bh)
+        cv2.circle(frame, (cx, cy), 5, dot_colour, -1, cv2.LINE_AA)
+
+
 def _make_frame_with_bar(
     w: int = _REF_W,
     h: int = _REF_H,
@@ -87,6 +96,8 @@ def _make_frame_with_bar(
     flag_y_pct: float = 0.5,
     bar_color: tuple = (76, 167, 93),   # green fairway BGR
     flag_color: tuple = (0, 0, 220),    # red flag BGR
+    draw_flag: bool = True,
+    add_white_dots: bool = False,
 ) -> np.ndarray:
     """
     Create a synthetic frame with a solid-colour hit bar and a small flag
@@ -103,14 +114,43 @@ def _make_frame_with_bar(
     # Add the dark outline columns that the visibility check requires.
     # Applied before the flag so that the flag patch sits on top.
     _draw_bar_dark_outline(frame, x0, y0, bw, bh)
-    fx = x0 + int(flag_x_pct * bw)
-    fy = y0 + int(flag_y_pct * bh)
-    # 8×8 patch
-    px0 = max(x0, fx - 4)
-    py0 = max(y0, fy - 4)
-    px1 = min(x1, fx + 4)
-    py1 = min(y1, fy + 4)
-    frame[py0:py1, px0:px1] = flag_color
+    if draw_flag:
+        fx = x0 + int(flag_x_pct * bw)
+        fy = y0 + int(flag_y_pct * bh)
+        # 8×8 patch
+        px0 = max(x0, fx - 4)
+        py0 = max(y0, fy - 4)
+        px1 = min(x1, fx + 4)
+        py1 = min(y1, fy + 4)
+        frame[py0:py1, px0:px1] = flag_color
+    if add_white_dots:
+        _draw_white_dots(frame, x0, y0, bw, bh)
+    return frame
+
+
+def _make_bar_only(
+    w: int = 120,
+    h: int = 627,
+    flag_x_pct: float = 0.5,
+    flag_y_pct: float = 0.5,
+    bar_color: tuple = (76, 167, 93),
+    flag_color: tuple = (0, 0, 220),
+    draw_flag: bool = True,
+    add_white_dots: bool = False,
+) -> np.ndarray:
+    frame = _make_blank_frame(w, h)
+    frame[:, :] = bar_color
+    _draw_bar_dark_outline(frame, 0, 0, w, h)
+    if draw_flag:
+        fx = int(flag_x_pct * w)
+        fy = int(flag_y_pct * h)
+        px0 = max(0, fx - 4)
+        py0 = max(0, fy - 4)
+        px1 = min(w, fx + 4)
+        py1 = min(h, fy + 4)
+        frame[py0:py1, px0:px1] = flag_color
+    if add_white_dots:
+        _draw_white_dots(frame, 0, 0, w, h)
     return frame
 
 
@@ -337,38 +377,59 @@ class TestFlagDetection:
     def test_flag_at_centre_direction(self):
         bar = self._analyze(0.5, 0.5)
         assert bar.is_visible
+        assert bar.flag_detected
         # Allow ±0.2 tolerance given 8-pixel patch rounding
         assert abs(bar.flag_direction_offset) < 0.3
 
     def test_flag_at_left(self):
         bar = self._analyze(0.1, 0.5)
         assert bar.is_visible
+        assert bar.flag_detected
         assert bar.flag_direction_offset < 0.0  # should be left-of-centre
 
     def test_flag_at_right(self):
         bar = self._analyze(0.9, 0.5)
         assert bar.is_visible
+        assert bar.flag_detected
         assert bar.flag_direction_offset > 0.0  # should be right-of-centre
 
     def test_flag_y_top(self):
         bar = self._analyze(0.5, 0.1)
         assert bar.is_visible
+        assert bar.flag_detected
         assert bar.flag_y_pct < 0.4
 
     def test_flag_y_bottom(self):
         bar = self._analyze(0.5, 0.9)
         assert bar.is_visible
+        assert bar.flag_detected
         assert bar.flag_y_pct > 0.6
 
     def test_direction_offset_in_valid_range(self):
         for x_pct in [0.1, 0.3, 0.5, 0.7, 0.9]:
             bar = self._analyze(x_pct, 0.5)
+            assert bar.flag_detected
             assert -1.0 <= bar.flag_direction_offset <= 1.0
 
     def test_y_pct_in_valid_range(self):
         for y_pct in [0.1, 0.3, 0.5, 0.7, 0.9]:
             bar = self._analyze(0.5, y_pct)
+            assert bar.flag_detected
             assert 0.0 <= bar.flag_y_pct <= 1.0
+
+    def test_bar_crop_detected(self):
+        frame = _make_bar_only(w=120, h=627, flag_x_pct=0.3, flag_y_pct=0.7)
+        state = self.analyzer.analyze(frame)
+        assert state.hit_bar is not None
+        assert state.hit_bar.is_visible
+        assert state.hit_bar.flag_detected
+
+    def test_white_dots_do_not_trigger_flag(self):
+        frame = _make_bar_only(draw_flag=False, add_white_dots=True)
+        state = self.analyzer.analyze(frame)
+        assert state.hit_bar is not None
+        assert state.hit_bar.is_visible
+        assert not state.hit_bar.flag_detected
 
 
 class TestTerrainClassification:
@@ -405,7 +466,7 @@ class TestTerrainClassification:
     def test_top_fairway_bottom_water(self):
         """Solid green top + blue-green high-std bottom should split zones."""
         # Fairway top (green, low std → solid colour)
-        # Water bottom: simulate by using high-std blue-green alternating rows
+        # Water bottom: simulate with diagonal striped blue-green rows
         frame = _make_blank_frame(_REF_W, _REF_H)
         x0, y0, x1, y1 = _bar_rect(_REF_W, _REF_H)
         bw, bh_bar = x1 - x0, y1 - y0
@@ -414,14 +475,14 @@ class TestTerrainClassification:
         mid_y = (y0 + y1) // 2
         frame[y0:mid_y, x0:x1] = (60, 138, 100)
 
-        # Bottom half: alternating rows of two colours to create high std
-        # Use blue-green hue (H≈80 in OpenCV) for WATER_OOB classification
-        # Rows alternating dark teal (0,120,80) and light teal (200,220,180)
+        # Bottom half: diagonal stripes of two colours to trigger stripe detection
+        stripe_w = 6
         for row in range(mid_y, y1):
-            if row % 2 == 0:
-                frame[row, x0:x1] = (50, 150, 30)   # dark teal-blue
-            else:
-                frame[row, x0:x1] = (200, 200, 100)  # light, high-value
+            for col in range(x0, x1):
+                if ((col + row) // stripe_w) % 2 == 0:
+                    frame[row, col] = (50, 150, 30)    # dark teal-blue
+                else:
+                    frame[row, col] = (200, 200, 100)  # light, high-value
 
         # Add the dark outline so the visibility check detects this as a bar.
         _draw_bar_dark_outline(frame, x0, y0, bw, bh_bar)
@@ -439,24 +500,24 @@ class TestTerrainClassifyRow:
     """Unit tests for the static _classify_row helper."""
 
     def test_fairway_low_std_green_hue(self):
-        zone = ScreenAnalyzer._classify_row(mean_h=53.0, bgr_std=30.0)
+        zone = ScreenAnalyzer._classify_row(mean_h=53.0, is_striped=False)
         assert zone == TerrainZoneType.FAIRWAY
 
     def test_rough_oob_high_std_green_hue(self):
-        zone = ScreenAnalyzer._classify_row(mean_h=53.0, bgr_std=50.0)
+        zone = ScreenAnalyzer._classify_row(mean_h=53.0, is_striped=True)
         assert zone == TerrainZoneType.ROUGH_OOB
 
     def test_water_oob_high_std_blue_hue(self):
-        zone = ScreenAnalyzer._classify_row(mean_h=81.0, bgr_std=61.0)
+        zone = ScreenAnalyzer._classify_row(mean_h=81.0, is_striped=True)
         assert zone == TerrainZoneType.WATER_OOB
 
     def test_border_case_below_water_hue(self):
         """H just below _WATER_HUE_MIN should not be classified as water."""
-        zone = ScreenAnalyzer._classify_row(mean_h=71.0, bgr_std=61.0)
+        zone = ScreenAnalyzer._classify_row(mean_h=71.0, is_striped=True)
         assert zone == TerrainZoneType.ROUGH_OOB
 
     def test_low_std_defaults_to_fairway(self):
-        zone = ScreenAnalyzer._classify_row(mean_h=80.0, bgr_std=10.0)
+        zone = ScreenAnalyzer._classify_row(mean_h=80.0, is_striped=False)
         assert zone == TerrainZoneType.FAIRWAY
 
 
@@ -470,6 +531,14 @@ def _load_screenshot(name: str) -> np.ndarray:
     img = cv2.imread(str(path))
     if img is None:
         pytest.skip(f"Screenshot not found: {path}")
+    return img
+
+
+def _load_uploaded_screenshot(name: str) -> np.ndarray:
+    path = _UPLOADS_DIR / name
+    img = cv2.imread(str(path))
+    if img is None:
+        pytest.skip(f"Uploaded screenshot not found: {path}")
     return img
 
 
@@ -543,3 +612,10 @@ class TestRealScreenshots:
         state = self.analyzer.analyze(frame)
         if state.hit_bar.is_visible:
             assert len(state.hit_bar.terrain_zones) >= 1
+
+    def test_uploaded_bar_crop_flag_detected(self):
+        frame = _load_uploaded_screenshot("Screenshot 2026-03-17 124540.png")
+        state = self.analyzer.analyze(frame)
+        self._check_common(state, "uploaded_bar_crop")
+        assert state.hit_bar.is_visible
+        assert state.hit_bar.flag_detected
