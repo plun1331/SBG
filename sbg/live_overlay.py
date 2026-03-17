@@ -28,6 +28,12 @@ Keyboard shortcuts while the window is open:
 
 Overlay elements drawn on each frame:
 
+* **Ball marker** – white circle at the detected ball location.
+* **Hole marker** – magenta ring at the detected hole location.
+* **Ball→hole path samples** – dots along the shot line with red points
+  indicating detected obstacles.
+* **Wind vector** – arrow showing detected wind direction and speed.
+* **Power gauge** – small bar showing the detected power level.
 * **Bar region rectangle** – green when the hit bar is detected, red when
   not detected.  Always drawn so you can confirm the region is correct.
 * **Terrain-zone strips** – semi-transparent colour bands along the bar:
@@ -46,6 +52,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+import math
 from typing import Optional
 
 import cv2
@@ -92,6 +99,20 @@ _FONT_SCALE  = 0.55
 _FONT_THICK  = 1
 _TEXT_COLOUR = (220, 220, 220)  # light grey
 _TEXT_SHADOW = (0, 0, 0)        # black drop-shadow
+
+# Scene markers
+_COLOUR_BALL = (245, 245, 245)
+_COLOUR_BALL_OUTLINE = (0, 0, 0)
+_COLOUR_HOLE = (200, 0, 200)
+_COLOUR_PATH = (60, 160, 60)
+_COLOUR_OBSTACLE = (0, 0, 255)
+_COLOUR_WIND = (0, 220, 255)
+_COLOUR_POWER = (0, 80, 220)
+
+_MARKER_RADIUS = 6
+_PATH_RADIUS = 3
+_POWER_BAR_W = 130
+_POWER_BAR_H = 10
 
 # Display window name
 _WINDOW_NAME = "SBG Live Overlay  [Q = quit | R = rec | Space = pause]"
@@ -269,6 +290,19 @@ class LiveOverlay:
         bx1 = bx0 + bw
         by1 = by0 + bh
 
+        if state is not None:
+            _draw_ball_marker(out, state.ball_position)
+            _draw_hole_marker(out, state.hole_position)
+            _draw_path_samples(
+                out,
+                state.ball_position,
+                state.hole_position,
+                state.terrain_elevation,
+                state.obstacle_map,
+            )
+            _draw_wind_vector(out, state.wind_speed, state.wind_direction_deg)
+            _draw_power_gauge(out, state.power_gauge)
+
         if state is not None and state.hit_bar is not None:
             bar: HitBarState = state.hit_bar
 
@@ -314,6 +348,16 @@ class LiveOverlay:
         if recording:
             hud.append("● REC")
         _draw_text_block(out, hud, 12, 24, _TEXT_COLOUR)
+
+        if state is not None:
+            info_lines = [
+                f"BALL {state.ball_position.x:.0f},{state.ball_position.y:.0f}",
+                f"HOLE {state.hole_position.x:.0f},{state.hole_position.y:.0f}",
+                f"DIST {state.distance_to_hole:.0f}",
+                f"WIND {state.wind_speed:.1f} @ {state.wind_direction_deg:.0f}°",
+                f"POWER {state.power_gauge:.2f}",
+            ]
+            _draw_text_block(out, info_lines, 12, 150, _TEXT_COLOUR)
 
         return out
 
@@ -371,6 +415,92 @@ def _draw_text_block(
             img, line, (x, ty),
             _FONT, _FONT_SCALE, colour, _FONT_THICK, cv2.LINE_AA,
         )
+
+
+def _clamp_point(img: np.ndarray, x: float, y: float) -> tuple:
+    h, w = img.shape[:2]
+    cx = int(max(0, min(w - 1, round(x))))
+    cy = int(max(0, min(h - 1, round(y))))
+    return cx, cy
+
+
+def _terrain_colour(value: float) -> tuple:
+    v = max(0.0, min(1.0, value))
+    green = int(80 + 150 * v)
+    return (40, green, 40)
+
+
+def _draw_ball_marker(img: np.ndarray, pos) -> None:
+    cx, cy = _clamp_point(img, pos.x, pos.y)
+    cv2.circle(img, (cx, cy), _MARKER_RADIUS, _COLOUR_BALL_OUTLINE, 2, cv2.LINE_AA)
+    cv2.circle(img, (cx, cy), _MARKER_RADIUS - 2, _COLOUR_BALL, -1, cv2.LINE_AA)
+
+
+def _draw_hole_marker(img: np.ndarray, pos) -> None:
+    cx, cy = _clamp_point(img, pos.x, pos.y)
+    cv2.circle(img, (cx, cy), _MARKER_RADIUS + 2, _COLOUR_HOLE, 2, cv2.LINE_AA)
+    cv2.circle(img, (cx, cy), 2, _COLOUR_HOLE, -1, cv2.LINE_AA)
+
+
+def _draw_path_samples(
+    img: np.ndarray,
+    ball,
+    hole,
+    terrain: list,
+    obstacles: list,
+) -> None:
+    if not terrain:
+        return
+    n = min(len(terrain), len(obstacles)) if obstacles else len(terrain)
+    if n <= 0:
+        return
+    bx, by = ball.x, ball.y
+    hx, hy = hole.x, hole.y
+    for i in range(n):
+        t = i / max(n - 1, 1)
+        px = bx + t * (hx - bx)
+        py = by + t * (hy - by)
+        cx, cy = _clamp_point(img, px, py)
+        if obstacles and obstacles[i] >= 0.5:
+            colour = _COLOUR_OBSTACLE
+            radius = _PATH_RADIUS + 1
+        else:
+            colour = _terrain_colour(terrain[i])
+            radius = _PATH_RADIUS
+        cv2.circle(img, (cx, cy), radius, colour, -1, cv2.LINE_AA)
+
+
+def _draw_wind_vector(
+    img: np.ndarray,
+    wind_speed: float,
+    wind_direction_deg: float,
+) -> None:
+    h, w = img.shape[:2]
+    origin = (w - 70, 40)
+    if wind_speed <= 0.1:
+        cv2.circle(img, origin, 3, _COLOUR_WIND, -1, cv2.LINE_AA)
+        return
+    length = max(8, int(40 * min(wind_speed / 20.0, 1.0)))
+    angle = math.radians(wind_direction_deg)
+    dx = math.cos(angle) * length
+    dy = -math.sin(angle) * length
+    end = (int(origin[0] + dx), int(origin[1] + dy))
+    cv2.arrowedLine(img, origin, end, _COLOUR_WIND, 2, cv2.LINE_AA, tipLength=0.3)
+
+
+def _draw_power_gauge(img: np.ndarray, power: float) -> None:
+    h, w = img.shape[:2]
+    x0 = 12
+    y0 = max(12, h - 28)
+    x1 = x0 + _POWER_BAR_W
+    y1 = y0 + _POWER_BAR_H
+    fill = int(x0 + _POWER_BAR_W * max(0.0, min(1.0, power)))
+    cv2.rectangle(img, (x0, y0), (x1, y1), _TEXT_SHADOW, 1)
+    cv2.rectangle(img, (x0, y0), (fill, y1), _COLOUR_POWER, -1)
+    cv2.putText(
+        img, "POWER", (x0, y0 - 6),
+        _FONT, _FONT_SCALE * 0.8, _TEXT_COLOUR, _FONT_THICK, cv2.LINE_AA,
+    )
 
 
 def _auto_output_name() -> str:
